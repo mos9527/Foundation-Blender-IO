@@ -1,0 +1,17 @@
+.idea/
+addons/.idea/
+addons/io_scene_gltf2/.idea/
+addons/io_scene_gltf2/libextern_draco.so
+addons/blender-debugger-for-vscode/
+mochawesome-report
+/scenes/
+/roundtrip/
+2.80/*
+.DS_Store
+desktop.ini
+yarn-error.log
+node_modules
+/tests_out
+__pycache__
+*.pyc
+.vscode/
