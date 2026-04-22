@@ -343,7 +343,9 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
             'Output format. Binary is most efficient, '
             'but JSON may be easier to edit later'
         ),
-        default=0,  # Warning => If you change the default, need to change the default filter too
+        # Foundation default: separate .gltf + .bin + textures (index 1 in
+        # get_format_items). Keep the ExportGLTF2.filter_glob default in sync.
+        default=1,  # Warning => If you change the default, need to change the default filter too
         update=on_export_format_changed,
     )
 
@@ -604,7 +606,7 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
     export_cameras: BoolProperty(
         name='Cameras',
         description='Export cameras',
-        default=False
+        default=True
     )
 
     use_selection: BoolProperty(
@@ -968,7 +970,7 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
                     'via "EXT_lights_area". Intensity for area lights is '
                     'passed through in Blender units; consumers must normalize '
                     'if they need physically accurate nits (cd/m²)',
-        default=False
+        default=True
     )
 
     export_try_sparse_sk: BoolProperty(
@@ -1866,7 +1868,8 @@ class ExportGLTF2(bpy.types.Operator, ExportGLTF2_Base, ExportHelper):
 
     filename_ext = ''
 
-    filter_glob: StringProperty(default='*.glb', options={'HIDDEN'})
+    # Must match ExportGLTF2_Base.export_format default (GLTF_SEPARATE).
+    filter_glob: StringProperty(default='*.gltf', options={'HIDDEN'})
 
 
 def menu_func_export(self, context):
