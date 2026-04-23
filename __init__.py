@@ -674,7 +674,7 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
         name='Apply Modifiers',
         description='Apply modifiers (excluding Armatures) to mesh objects -'
                     'WARNING: prevents exporting shape keys',
-        default=False
+        default=True
     )
 
     export_shared_accessors: BoolProperty(
