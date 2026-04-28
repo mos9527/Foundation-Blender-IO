@@ -7,6 +7,7 @@ Extensions
 Some extensions non-exsistent in the [offical implementation](https://github.com/KhronosGroup/glTF-Blender-IO) are implemented here for authoring scenes to be used by Foundation.
 
 - `EXT_lights_area` (https://github.com/KhronosGroup/glTF/pull/2525)
+- `EXT_materials_subsurface` (Foundation private extension; see [draft](EXT_materials_subsurface.md))
 
 Installation
 ---

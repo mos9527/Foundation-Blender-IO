@@ -33,6 +33,7 @@ from .extensions.transmission import export_transmission
 from .extensions.clearcoat import export_clearcoat
 from .extensions.anisotropy import export_anisotropy
 from .extensions.ior import export_ior
+from .extensions.subsurface import export_subsurface
 from .search_node_tree import \
     has_image_node_from_socket, \
     get_socket_from_gltf_material_node, \
@@ -328,6 +329,13 @@ def __gather_extensions(bmat, emissive_factor, export_settings):
     volume_extension, uvmap_info, udim_info = export_volume(bmat, export_settings)
     if volume_extension:
         extensions["KHR_materials_volume"] = volume_extension
+        uvmap_infos.update(uvmap_info)
+        udim_infos.update(udim_info)
+
+    # EXT_materials_subsurface
+    subsurface_extension, uvmap_info, udim_info = export_subsurface(bmat, export_settings)
+    if subsurface_extension:
+        extensions["EXT_materials_subsurface"] = subsurface_extension
         uvmap_infos.update(uvmap_info)
         udim_infos.update(udim_info)
 
