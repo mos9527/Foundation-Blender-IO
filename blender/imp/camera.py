@@ -78,8 +78,28 @@ class BlenderCamera():
 
         pycamera.blender_object_data = cam  # Needed in case of KHR_animation_pointer
 
+        BlenderCamera.apply_lens_extension(pycamera, cam)
+
         return cam
 
     @staticmethod
     def calc_lens_from_fov(gltf, input_value, sensor):
         return (sensor / 2.0) / tan(input_value * 0.5)
+
+    @staticmethod
+    def apply_lens_extension(pycamera, cam):
+        if pycamera.extensions is None:
+            return
+
+        lens = pycamera.extensions.get('EXT_camera_lens')
+        if lens is None:
+            return
+
+        cam.dof.use_dof = True
+
+        if 'sensorSize' in lens:
+            cam.sensor_height = float(lens['sensorSize'])
+        if 'fStop' in lens:
+            cam.dof.aperture_fstop = float(lens['fStop'])
+        if 'focusDistance' in lens:
+            cam.dof.focus_distance = float(lens['focusDistance'])

@@ -14,10 +14,14 @@
 
 import bpy
 from ...io.com import gltf2_io
+from ...io.com.gltf2_io_extensions import Extension
 from ...blender.com.conversion import yvof_blender_to_gltf
 from ...io.exp.user_extensions import export_user_extensions
 from ..com.extras import generate_extras
 from .cache import cached
+
+
+EXT_CAMERA_LENS = 'EXT_camera_lens'
 
 
 @cached
@@ -46,7 +50,22 @@ def __filter_camera(blender_camera, export_settings):
 
 
 def __gather_extensions(blender_camera, export_settings):
-    return None
+    if blender_camera.type != 'PERSP':
+        return None
+
+    dof = blender_camera.dof
+    if not dof.use_dof:
+        return None
+
+    lens_extension = {
+        'sensorSize': blender_camera.sensor_height,
+        'fStop': dof.aperture_fstop,
+        'focusDistance': dof.focus_distance,
+    }
+
+    return {
+        EXT_CAMERA_LENS: Extension(EXT_CAMERA_LENS, lens_extension, False)
+    }
 
 
 def __gather_extras(blender_camera, export_settings):
