@@ -61,6 +61,9 @@ def __gather_extensions(blender_camera, export_settings):
         'sensorSize': blender_camera.sensor_height,
         'fStop': dof.aperture_fstop,
         'focusDistance': dof.focus_distance,
+        'apertureBlades': dof.aperture_blades,
+        'apertureRotation': dof.aperture_rotation,
+        'apertureRatio': dof.aperture_ratio,
     }
 
     return {

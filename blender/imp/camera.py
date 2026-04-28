@@ -103,3 +103,9 @@ class BlenderCamera():
             cam.dof.aperture_fstop = float(lens['fStop'])
         if 'focusDistance' in lens:
             cam.dof.focus_distance = float(lens['focusDistance'])
+        if 'apertureBlades' in lens:
+            cam.dof.aperture_blades = int(lens['apertureBlades'])
+        if 'apertureRotation' in lens:
+            cam.dof.aperture_rotation = float(lens['apertureRotation'])
+        if 'apertureRatio' in lens:
+            cam.dof.aperture_ratio = float(lens['apertureRatio'])
