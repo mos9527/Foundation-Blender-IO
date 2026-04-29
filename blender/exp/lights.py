@@ -122,66 +122,15 @@ def gather_lamp_color(blender_lamp, animation_pointer_path, export_settings) -> 
 
 
 def __gather_intensity(blender_lamp, blender_lamp_world_matrix, export_settings) -> Optional[float]:
-    emission_node = __get_cycles_emission_node(blender_lamp)
+    emission_strength = blender_lamp.energy
+    if not blender_lamp.normalize:
+        emission_strength *= blender_lamp.area(matrix_world=blender_lamp_world_matrix)
 
-    if bpy.context.scene.render.engine == 'BLENDER_EEVEE':
-        emission_node = None  # EEVEE nodes are not taken into account (yet)
-
-    if emission_node is not None:
-        if blender_lamp.type != 'SUN':
-            # When using cycles, the strength should be influenced by a LightFalloff node
-            result = search_node_tree.from_socket(
-                search_node_tree.NodeSocket(emission_node.inputs.get("Strength"), [blender_lamp.node_tree]),
-                search_node_tree.FilterByType(bpy.types.ShaderNodeLightFalloff)
-            )
-            if result:
-                quadratic_falloff_node = result[0].shader_node
-                emission_strength = quadratic_falloff_node.inputs["Strength"].default_value / (math.pi * 4.0)
-                if not blender_lamp.normalize:
-                    emission_strength *= blender_lamp.area(matrix_world=blender_lamp_world_matrix)
-
-                # Store data for KHR_animation_pointer
-                path_ = {}
-                path_['length'] = 1
-                path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/intensity"
-                path_['lamp_type'] = blender_lamp.type
-                export_settings['current_paths']["node_tree." +
-                                                 quadratic_falloff_node.inputs["Strength"].path_from_id() +
-                                                 ".default_value"] = path_
-
-            else:
-                export_settings['log'].warning('No quadratic light falloff node attached to emission strength property')
-
-                path_ = {}
-                path_['length'] = 1
-                path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/intensity"
-                path_['lamp_type'] = blender_lamp.type
-                export_settings['current_paths']["energy"] = path_
-
-                emission_strength = blender_lamp.energy
-                if not blender_lamp.normalize:
-                    emission_strength *= blender_lamp.area(matrix_world=blender_lamp_world_matrix)
-        else:
-            emission_strength = emission_node.inputs["Strength"].default_value
-
-            path_ = {}
-            path_['length'] = 1
-            path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/intensity"
-            path_['lamp_type'] = blender_lamp.type
-            export_settings['current_paths']["node_tree." +
-                                             emission_node.inputs["Strength"].path_from_id() +
-                                             ".default_value"] = path_
-
-    else:
-        emission_strength = blender_lamp.energy
-        if not blender_lamp.normalize:
-            emission_strength *= blender_lamp.area(matrix_world=blender_lamp_world_matrix)
-
-        path_ = {}
-        path_['length'] = 1
-        path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/intensity"
-        path_['lamp_type'] = blender_lamp.type
-        export_settings['current_paths']["energy"] = path_
+    path_ = {}
+    path_['length'] = 1
+    path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/intensity"
+    path_['lamp_type'] = blender_lamp.type
+    export_settings['current_paths']["energy"] = path_
 
     if export_settings['gltf_lighting_mode'] == 'RAW':
         # TODO: Detect exposure animation and add it to the path, for KRH_animation_pointer
