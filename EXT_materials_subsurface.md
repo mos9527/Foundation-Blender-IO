@@ -56,7 +56,8 @@ For current Foundation materials:
 ```text
 FMaterial::subsurfaceFactor = subsurfaceWeight
 FMaterial::subsurfaceColor  = [1, 1, 1]
-FMaterial::subsurfaceRadius = subsurfaceRadius * subsurfaceScale
+FMaterial::subsurfaceRadius = subsurfaceRadius
+FMaterial::subsurfaceScale  = subsurfaceScale
 ```
 
 The shader may use `baseColor * subsurfaceColor` for local Burley approximation. Since Blender's exposed Subsurface panel has no separate subsurface color in this mode, the extension keeps `subsurfaceColor` neutral and lets base color tint the lobe. Runtime Burley diffusion distance should match Blender's `bssrdf.h` setup:
@@ -64,7 +65,7 @@ The shader may use `baseColor * subsurfaceColor` for local Burley approximation.
 ```text
 A = baseColor * subsurfaceColor
 s = 1.9 - A + 3.5 * (A - 0.8)^2
-d = (0.25 / pi) * FMaterial::subsurfaceRadius / s
+d = (0.25 / pi) * (FMaterial::subsurfaceRadius * FMaterial::subsurfaceScale) / s
 ```
 
 The renderer should use `d` as the per-channel Burley profile radius.
