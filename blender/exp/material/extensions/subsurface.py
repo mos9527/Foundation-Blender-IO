@@ -37,29 +37,6 @@ def _socket_path(socket):
     return "node_tree." + socket.socket.path_from_id() + ".default_value"
 
 
-def _get_subsurface_method(bmat):
-    material = bmat.get_used_material()
-    node_tree = material.node_tree
-    method = getattr(material, "subsurface_method", None)
-
-    if node_tree:
-        nodes = [node for node in node_tree.nodes if isinstance(node, bpy.types.ShaderNodeBsdfPrincipled)]
-        for node in nodes:
-            method = getattr(node, "subsurface_method", method)
-
-    if method is None:
-        return "christensenBurley"
-
-    normalized = str(method).lower().replace("_", "")
-    if normalized in {"christensenburley", "burley"}:
-        return "christensenBurley"
-    if normalized == "randomwalk":
-        return "randomWalk"
-    if normalized == "randomwalkskin":
-        return "randomWalkSkin"
-    return str(method)
-
-
 def export_subsurface(bmat, export_settings):
     node_tree = bmat.get_used_material().node_tree
     if node_tree is None:
@@ -74,7 +51,7 @@ def export_subsurface(bmat, export_settings):
         return None, {}, {}
 
     subsurface_extension = {
-        "subsurfaceMethod": _get_subsurface_method(bmat),
+        "subsurfaceProfile": "burley",
         "subsurfaceWeight": weight,
     }
 
