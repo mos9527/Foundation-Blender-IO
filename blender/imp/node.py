@@ -21,6 +21,7 @@ from .mesh import BlenderMesh
 from .camera import BlenderCamera
 from .light import BlenderLight
 from .light_area import BlenderLightArea
+from .curves import BlenderCurve
 from .vnode import VNode
 
 
@@ -90,6 +91,13 @@ class BlenderNode():
 
             # Since we create the actual Blender object after the create call, we call the hook here
             import_user_extensions('gather_import_light_after_hook', gltf, vnode, obj, light)
+
+        elif vnode.curve_node_idx is not None:
+            pynode = gltf.data.nodes[vnode.curve_node_idx]
+            curve_id = (pynode.extensions or {})['EXT_foundation_curves']['curve']
+            curve = BlenderCurve.create(gltf, vnode, curve_id)
+            name = vnode.name or curve.name
+            obj = bpy.data.objects.new(name, curve)
 
         elif vnode.is_arma:
             armature = bpy.data.armatures.new(vnode.arma_name)
