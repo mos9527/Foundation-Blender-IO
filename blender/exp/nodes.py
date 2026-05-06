@@ -24,6 +24,7 @@ from ..com import gltf2_blender_math
 from . import tree as gltf2_blender_gather_tree
 from . import skins as gltf2_blender_gather_skins
 from . import cameras as gltf2_blender_gather_cameras
+from . import curves as gltf2_blender_gather_curves
 from . import obj_data as gltf2_blender_gather_mesh
 from . import joints as gltf2_blender_gather_joints
 from . import lights as gltf2_blender_gather_lights
@@ -282,6 +283,22 @@ def __gather_extensions(vnode, export_settings):
 
                 export_settings['current_paths'] = {}
 
+    if blender_object is not None and blender_object.type in ["CURVE", "CURVES"]:
+        curve = gltf2_blender_gather_curves.gather_curve(blender_object, export_settings)
+        if curve is not None:
+            curve_extension = gltf2_io_extensions.ChildOfRootExtension(
+                name=gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES,
+                path=["curves"],
+                extension=curve,
+            )
+            extensions[gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES] = gltf2_io_extensions.Extension(
+                name=gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES,
+                extension={
+                    "curve": curve_extension,
+                },
+            )
+            export_settings.setdefault("foundation_curve_objects", set()).add(id(blender_object))
+
     return extensions if extensions else None
 
 
@@ -298,6 +315,8 @@ def __gather_matrix(blender_object, export_settings):
 
 def __gather_mesh(vnode, blender_object, export_settings):
     if vnode.blender_type == VExportNode.COLLECTION:
+        return None
+    if blender_object and id(blender_object) in export_settings.get("foundation_curve_objects", set()):
         return None
     if blender_object and blender_object.type in ['CURVE', 'SURFACE', 'FONT']:
         return __gather_mesh_from_blender_nonmesh(blender_object, export_settings)
