@@ -17,6 +17,7 @@ from mathutils import Vector
 from ...io.com import constants as gltf2_io_constants
 from ...io.exp import binary_data as gltf2_io_binary_data
 from .accessors import gather_accessor
+from .material.materials import gather_material
 
 
 EXT_FOUNDATION_CURVES = "EXT_foundation_curves"
@@ -34,7 +35,7 @@ def gather_curve(blender_object, export_settings):
     if len(points) == 0 or len(curve_vertex_counts) == 0:
         raise RuntimeError("'{}' does not contain any renderable Bezier splines.".format(blender_object.name))
 
-    return {
+    curve = {
         "name": blender_object.name,
         "basis": "bezier",
         "points": gather_accessor(
@@ -54,6 +55,28 @@ def gather_curve(blender_object, export_settings):
             gltf2_io_constants.DataType.Scalar,
             export_settings),
     }
+
+    material = __gather_curve_material(blender_object, export_settings)
+    if material is not None:
+        curve["material"] = material
+
+    return curve
+
+
+def __gather_curve_material(blender_object, export_settings):
+    if export_settings.get("gltf_materials") not in ["EXPORT", "VIEWPORT"]:
+        return None
+
+    material = None
+    if blender_object.material_slots:
+        material = blender_object.material_slots[0].material
+    if material is None and getattr(blender_object.data, "materials", None):
+        material = blender_object.data.materials[0] if len(blender_object.data.materials) > 0 else None
+    if material is None:
+        return None
+
+    gathered_material, _ = gather_material(material, export_settings)
+    return gathered_material
 
 
 def __gather_legacy_bezier_curve(blender_object, export_settings):

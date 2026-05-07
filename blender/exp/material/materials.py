@@ -14,6 +14,7 @@
 
 from copy import deepcopy
 import bpy
+import math
 
 from ....io.com import gltf2_io
 from ....io.com.gltf2_io_extensions import Extension
@@ -40,8 +41,12 @@ from .search_node_tree import \
     get_socket, \
     get_node_socket, \
     get_material_nodes, \
+    check_if_is_linked_to_active_output, \
+    get_factor_from_socket, \
     NodeSocket, \
     gather_alpha_info
+
+EXT_FOUNDATION_MATERIALS = "EXT_foundation_materials"
 
 
 class BlenderMaterialIndentifier:
@@ -360,6 +365,11 @@ def __gather_extensions(bmat, emissive_factor, export_settings):
         uvmap_infos.update(uvmap_info)
         udim_infos.update(udim_info)
 
+    # EXT_foundation_materials
+    foundation_material_extension = __gather_foundation_material(bmat, export_settings)
+    if foundation_material_extension:
+        extensions[EXT_FOUNDATION_MATERIALS] = foundation_material_extension
+
     # KHR_materials_ior
     # Keep this extension at the end, because we export it only if some others are exported
     ior_extension = export_ior(bmat, extensions, export_settings)
@@ -367,6 +377,66 @@ def __gather_extensions(bmat, emissive_factor, export_settings):
         extensions["KHR_materials_ior"] = ior_extension
 
     return extensions, uvmap_infos, udim_infos
+
+
+def __gather_foundation_material(bmat, export_settings):
+    node_tree = bmat.get_used_material().node_tree
+    if node_tree is None:
+        return None
+
+    hair_type = getattr(bpy.types, "ShaderNodeBsdfHairPrincipled", None)
+    hair_node = __active_node(node_tree, hair_type)
+    if hair_node is not None:
+        model = str(getattr(hair_node[0], "model", "CHIANG")).lower()
+        if model != "chiang":
+            raise RuntimeError(
+                "EXT_foundation_materials supports only the Chiang model for Principled Hair; "
+                "material '{}' uses '{}'.".format(bmat.get_used_material().name, model))
+
+        extension = {
+            "shaderBlock": "hair",
+            "model": "chiang",
+            "betaM": __read_node_scalar(hair_node, ("Roughness",), 0.3),
+            "betaN": __read_node_scalar(hair_node, ("Radial Roughness", "RadialRoughness"), 0.3),
+            "alpha": __read_node_scalar(hair_node, ("Offset",), 2.0, angle_to_degrees=True),
+        }
+        return Extension(EXT_FOUNDATION_MATERIALS, extension, False)
+
+    principled_node = __active_node(node_tree, bpy.types.ShaderNodeBsdfPrincipled)
+    if principled_node is not None:
+        return Extension(EXT_FOUNDATION_MATERIALS, {"shaderBlock": "principled"}, False)
+
+    return None
+
+
+def __active_node(node_tree, node_type):
+    if node_type is None:
+        return None
+
+    nodes = get_material_nodes(node_tree, [node_tree], node_type)
+    for node in nodes:
+        if node[0].outputs and check_if_is_linked_to_active_output(node[0].outputs[0], node[1]):
+            return node
+    return None
+
+
+def __read_node_scalar(node, socket_names, default, angle_to_degrees=False):
+    shader_node, group_path = node
+    for socket_name in socket_names:
+        socket = shader_node.inputs.get(socket_name)
+        if socket is None:
+            continue
+
+        value, _ = get_factor_from_socket(NodeSocket(socket, group_path))
+        if value is None:
+            continue
+
+        value = float(value)
+        if angle_to_degrees and getattr(socket, "subtype", None) == "ANGLE":
+            value = math.degrees(value)
+        return value
+
+    return default
 
 
 def __gather_normal_texture(bmat, export_settings):

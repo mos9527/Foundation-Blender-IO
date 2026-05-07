@@ -10,6 +10,7 @@ Some extensions non-exsistent in the [offical implementation](https://github.com
 - `EXT_materials_subsurface` (Foundation private extension; see [draft](EXT_materials_subsurface.md))
 - `EXT_camera_lens` (Foundation private extension; see [draft](EXT_camera_lens.md))
 - `EXT_foundation_curves` (Foundation private extension; see [draft](EXT_foundation_curves.md))
+- `EXT_foundation_materials` (Foundation private extension; see [draft](EXT_foundation_materials.md))
 Installation
 ---
 Download as ZIP then install via drag&drop.

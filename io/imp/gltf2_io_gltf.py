@@ -68,7 +68,8 @@ class glTFImporter():
             'KHR_materials_volume',
             'EXT_texture_webp',
             'KHR_materials_anisotropy',
-            'EXT_foundation_curves'
+            'EXT_foundation_curves',
+            'EXT_foundation_materials'
         ]
 
         # Add extensions required supported by custom import extensions
