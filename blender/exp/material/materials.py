@@ -127,6 +127,7 @@ def gather_material(bmat, export_settings):
         return export_viewport_material(bmat.material, export_settings), {"uv_info": {}, "vc_info": {
             'color': None, 'alpha': None, 'color_type': None, 'alpha_type': None, 'alpha_mode': "OPAQUE"}, "udim_info": {}}
 
+    export_settings.setdefault('current_paths', {})
     nodes_used = export_settings['nodes_used'] = {}
 
     # Reset exported images / textures nodes
