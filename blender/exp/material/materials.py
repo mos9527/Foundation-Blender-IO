@@ -41,8 +41,8 @@ from .search_node_tree import \
     get_socket, \
     get_node_socket, \
     get_material_nodes, \
-    check_if_is_linked_to_active_output, \
     get_factor_from_socket, \
+    get_const_from_socket, \
     NodeSocket, \
     gather_alpha_info
 
@@ -149,6 +149,11 @@ def gather_material(bmat, export_settings):
         bmat, orm_texture, export_settings)
     pbr_metallic_roughness, uvmap_info_pbr_metallic_roughness, vc_info, udim_info_prb_mr, alpha_info = __gather_pbr_metallic_roughness(
         bmat, orm_texture, export_settings)
+    foundation_hair_node = __active_node_by_type(
+        node_tree=bmat.material.node_tree,
+        node_type="BSDF_HAIR_PRINCIPLED")
+    if foundation_hair_node is not None:
+        pbr_metallic_roughness = __gather_foundation_hair_pbr(foundation_hair_node)
 
     if any([i > 1.0 for i in emissive_factor or []]) is True:
         # Strength is set on extension
@@ -380,18 +385,18 @@ def __gather_extensions(bmat, emissive_factor, export_settings):
 
 
 def __gather_foundation_material(bmat, export_settings):
-    node_tree = bmat.get_used_material().node_tree
+    node_tree = bmat.material.node_tree
+    material_name = __foundation_material_name(bmat)
     if node_tree is None:
         return None
 
-    hair_type = getattr(bpy.types, "ShaderNodeBsdfHairPrincipled", None)
-    hair_node = __active_node(node_tree, hair_type)
+    hair_node = __active_node_by_type(node_tree, "BSDF_HAIR_PRINCIPLED")
     if hair_node is not None:
         model = str(getattr(hair_node[0], "model", "CHIANG")).lower()
         if model != "chiang":
             raise RuntimeError(
                 "EXT_foundation_materials supports only the Chiang model for Principled Hair; "
-                "material '{}' uses '{}'.".format(bmat.get_used_material().name, model))
+                "material '{}' uses '{}'.".format(material_name, model))
 
         extension = {
             "shaderBlock": "hair",
@@ -399,25 +404,111 @@ def __gather_foundation_material(bmat, export_settings):
             "betaM": __read_node_scalar(hair_node, ("Roughness",), 0.3),
             "betaN": __read_node_scalar(hair_node, ("Radial Roughness", "RadialRoughness"), 0.3),
             "alpha": __read_node_scalar(hair_node, ("Offset",), 2.0, angle_to_degrees=True),
+            "ior": __read_node_scalar(hair_node, ("IOR",), 1.55),
         }
         return Extension(EXT_FOUNDATION_MATERIALS, extension, False)
 
-    principled_node = __active_node(node_tree, bpy.types.ShaderNodeBsdfPrincipled)
+    principled_node = __active_node_by_type(node_tree, "BSDF_PRINCIPLED")
     if principled_node is not None:
         return Extension(EXT_FOUNDATION_MATERIALS, {"shaderBlock": "principled"}, False)
 
     return None
 
 
-def __active_node(node_tree, node_type):
-    if node_type is None:
+def __foundation_material_name(bmat):
+    return getattr(bmat.get_used_material(), "name", None) or getattr(bmat.material, "name", "<unnamed>")
+
+
+def __active_node_by_type(node_tree, node_type):
+    if node_tree is None:
         return None
 
-    nodes = get_material_nodes(node_tree, [node_tree], node_type)
+    nodes = get_material_nodes(node_tree, [node_tree], bpy.types.ShaderNode)
+    best_node = None
+    best_rank = 0
     for node in nodes:
-        if node[0].outputs and check_if_is_linked_to_active_output(node[0].outputs[0], node[1]):
-            return node
-    return None
+        if node[0].type != node_type:
+            continue
+
+        if not node[0].outputs:
+            continue
+
+        rank = __foundation_output_link_rank(node[0].outputs[0], node[1])
+        if rank > best_rank:
+            best_node = node
+            best_rank = rank
+            if best_rank == 3:
+                break
+    return best_node
+
+
+def __foundation_output_link_rank(shader_socket, group_path):
+    best_rank = 0
+
+    for link in shader_socket.links:
+        if link.to_node.type == "GROUP":
+            socket_name = link.to_socket.identifier
+            sockets = [n for n in link.to_node.node_tree.nodes if n.type == "GROUP_INPUT"][0].outputs
+            socket = [s for s in sockets if s.identifier == socket_name][0]
+            new_group_path = group_path.copy()
+            new_group_path.append(link.to_node)
+            best_rank = max(best_rank, __foundation_output_link_rank(socket, new_group_path))
+            continue
+
+        if link.to_node.type == "GROUP_OUTPUT":
+            socket_name = link.to_socket.identifier
+            sockets = group_path[-1].outputs
+            socket = [s for s in sockets if s.identifier == socket_name][0]
+            best_rank = max(best_rank, __foundation_output_link_rank(socket, group_path[:-1]))
+            continue
+
+        if isinstance(link.to_node, bpy.types.ShaderNodeOutputMaterial):
+            target = getattr(link.to_node, "target", None)
+            active = getattr(link.to_node, "is_active_output", None)
+            if link.to_socket.identifier != "Surface":
+                continue
+
+            if active is True:
+                return 3
+            if target == "CYCLES":
+                best_rank = max(best_rank, 2)
+            else:
+                best_rank = max(best_rank, 1)
+            continue
+
+        if len(link.to_node.outputs) > 0:
+            best_rank = max(best_rank, __foundation_output_link_rank(link.to_node.outputs[0], group_path))
+
+    return best_rank
+
+
+def __gather_foundation_hair_pbr(node):
+    color = __read_node_color(node, ("Color",), [1.0, 1.0, 1.0])
+    roughness = __read_node_scalar(node, ("Roughness",), 0.3)
+    return gltf2_io.MaterialPBRMetallicRoughness(
+        base_color_factor=[*color, 1.0],
+        base_color_texture=None,
+        extensions=None,
+        extras=None,
+        metallic_factor=0.0,
+        metallic_roughness_texture=None,
+        roughness_factor=roughness)
+
+
+def __read_node_color(node, socket_names, default):
+    shader_node, group_path = node
+    for socket_name in socket_names:
+        socket = shader_node.inputs.get(socket_name)
+        if socket is None:
+            continue
+
+        value, _ = get_const_from_socket(NodeSocket(socket, group_path), kind='RGB')
+        if value is None:
+            continue
+
+        return [max(min(float(c), 1.0), 0.0) for c in value[:3]]
+
+    return default
 
 
 def __read_node_scalar(node, socket_names, default, angle_to_degrees=False):
@@ -427,7 +518,7 @@ def __read_node_scalar(node, socket_names, default, angle_to_degrees=False):
         if socket is None:
             continue
 
-        value, _ = get_factor_from_socket(NodeSocket(socket, group_path))
+        value, _ = get_factor_from_socket(NodeSocket(socket, group_path), kind='VALUE')
         if value is None:
             continue
 

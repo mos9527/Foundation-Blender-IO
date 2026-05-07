@@ -16,7 +16,8 @@ This material extension selects the Foundation shader block to use for a glTF ma
           "model": "chiang",
           "betaM": 0.3,
           "betaN": 0.3,
-          "alpha": 2.0
+          "alpha": 2.0,
+          "ior": 1.55
         }
       }
     }
@@ -39,6 +40,9 @@ This material extension selects the Foundation shader block to use for a glTF ma
 - `alpha`: number, optional.
   Hair scale tilt in degrees.
 
+- `ior`: number, optional.
+  Hair interior index of refraction.
+
 ## Blender Mapping
 
 The Foundation Blender exporter chooses the shader block from the active material shader:
@@ -51,5 +55,6 @@ For Principled Hair, scalar socket values are mapped as:
 - `Roughness` -> `betaM`
 - `Radial Roughness` -> `betaN`
 - `Offset` -> `alpha`
+- `IOR` -> `ior`
 
 Only the Chiang Principled Hair model is exported. Other hair models fail export so Foundation does not silently import a different scattering model.
