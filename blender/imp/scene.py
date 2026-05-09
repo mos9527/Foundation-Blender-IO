@@ -13,12 +13,64 @@
 # limitations under the License.
 
 import bpy
+import os
 
 from .node import BlenderNode
 from .animation import BlenderAnimation
 from .vnode import VNode, compute_vnodes
 from ..com.extras import set_extras
+from ...io.com.path import uri_to_path
 from ...io.imp.user_extensions import import_user_extensions
+
+EXT_FOUNDATION_ENVIRONMENT = "EXT_foundation_environment"
+
+
+def __foundation_apply_environment(gltf, pyscene, scene):
+    if pyscene.extensions is None or EXT_FOUNDATION_ENVIRONMENT not in pyscene.extensions:
+        return
+
+    extension = pyscene.extensions[EXT_FOUNDATION_ENVIRONMENT]
+    env_type = extension.get("type")
+    strength = extension.get("strength", 1.0)
+
+    world = scene.world
+    if world is None:
+        world = bpy.data.worlds.new(scene.name + " World")
+        scene.world = world
+    world.use_nodes = True
+
+    nodes = world.node_tree.nodes
+    links = world.node_tree.links
+    nodes.clear()
+
+    output = nodes.new("ShaderNodeOutputWorld")
+    background = nodes.new("ShaderNodeBackground")
+    links.new(background.outputs["Background"], output.inputs["Surface"])
+    background.inputs["Strength"].default_value = strength
+
+    if env_type == "color":
+        color = extension.get("color", [1.0, 1.0, 1.0])
+        background.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
+        return
+
+    if env_type in {"hdri", "envMap"}:
+        uri = extension.get("uri")
+        if uri is None:
+            return
+
+        path = os.path.abspath(os.path.join(os.path.dirname(gltf.filename), uri_to_path(uri)))
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in {".hdr", ".hdri"}:
+            gltf.log.warning("Skipping unsupported Foundation environment image: %s" % path)
+            return
+
+        env = nodes.new("ShaderNodeTexEnvironment")
+        try:
+            env.image = bpy.data.images.load(path, check_existing=True)
+        except RuntimeError:
+            gltf.log.error("Missing Foundation environment image: %s" % path)
+            return
+        links.new(env.outputs["Color"], background.inputs["Color"])
 
 
 class BlenderScene():
@@ -42,6 +94,7 @@ class BlenderScene():
             # So, there is an option to know if the user want to set extras or not
             if gltf.import_settings['import_scene_extras']:
                 set_extras(scene, pyscene.extras)
+            __foundation_apply_environment(gltf, pyscene, scene)
 
         compute_vnodes(gltf)
 

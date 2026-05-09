@@ -13,8 +13,11 @@
 # limitations under the License.
 
 import bpy
+import os
 
 from ...io.com import gltf2_io
+from ...io.com.gltf2_io_extensions import Extension
+from ...io.com.path import path_to_uri
 from ...io.exp.user_extensions import export_user_extensions
 from ..com.extras import generate_extras
 from .cache import cached
@@ -23,6 +26,8 @@ from . import joints as gltf2_blender_gather_joints
 from . import tree as gltf2_blender_gather_tree
 from .animation.sampled.object.keyframes import get_cache_data
 from .animation.animations import gather_animations
+
+EXT_FOUNDATION_ENVIRONMENT = "EXT_foundation_environment"
 
 
 def gather_gltf2(export_settings):
@@ -67,7 +72,7 @@ def gather_gltf2(export_settings):
 @cached
 def __gather_scene(blender_scene, export_settings):
     scene = gltf2_io.Scene(
-        extensions=None,
+        extensions=__gather_extensions(blender_scene, export_settings),
         extras=__gather_extras(blender_scene, export_settings),
         name=__gather_name(blender_scene, export_settings),
         nodes=[]
@@ -150,6 +155,77 @@ def __gather_scene(blender_scene, export_settings):
     export_user_extensions('gather_scene_hook', export_settings, scene, blender_scene)
 
     return scene
+
+
+def __gather_extensions(blender_scene, export_settings):
+    extension = __foundation_gather_environment(blender_scene, export_settings)
+    if extension is None:
+        return None
+    return {EXT_FOUNDATION_ENVIRONMENT: Extension(EXT_FOUNDATION_ENVIRONMENT, extension, False)}
+
+
+def __foundation_gather_environment(blender_scene, export_settings):
+    world = blender_scene.world
+    if world is None:
+        return {
+            "type": "color",
+            "color": [1.0, 1.0, 1.0],
+            "strength": 0.05,
+        }
+
+    if world.use_nodes and world.node_tree is not None:
+        background = next((node for node in world.node_tree.nodes if node.bl_idname == "ShaderNodeBackground"), None)
+        if background is not None:
+            strength_socket = background.inputs.get("Strength")
+            strength = strength_socket.default_value if strength_socket is not None else 1.0
+            color_socket = background.inputs.get("Color")
+            if color_socket is not None and color_socket.is_linked:
+                link = color_socket.links[0]
+                if link.from_node.bl_idname == "ShaderNodeTexEnvironment":
+                    image = link.from_node.image
+                    uri = __foundation_environment_image_uri(image, export_settings)
+                    if uri is not None:
+                        return {
+                            "type": "hdri",
+                            "uri": uri,
+                            "projection": "longlat",
+                            "strength": strength,
+                        }
+
+            if color_socket is not None:
+                color = color_socket.default_value
+                return {
+                    "type": "color",
+                    "color": [color[0], color[1], color[2]],
+                    "strength": strength,
+                }
+
+    color = world.color
+    return {
+        "type": "color",
+        "color": [color[0], color[1], color[2]],
+        "strength": 1.0,
+    }
+
+
+def __foundation_environment_image_uri(image, export_settings):
+    if image is None or image.filepath in {None, ""}:
+        return None
+
+    path = bpy.path.abspath(image.filepath, library=image.library)
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in {".hdr", ".hdri"}:
+        export_settings['log'].warning("Skipping unsupported world environment; Foundation editor supports only .hdr/.hdri")
+        return None
+
+    if not os.path.exists(path):
+        return None
+
+    try:
+        rel_path = os.path.relpath(path, start=export_settings['gltf_filedirectory'])
+    except ValueError:
+        return None
+    return path_to_uri(rel_path)
 
 
 def __gather_extras(blender_object, export_settings):
