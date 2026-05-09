@@ -27,6 +27,42 @@ from ..com import json_util
 from . import gather as gltf2_blender_gather
 from .exporter import GlTF2Exporter
 
+EXT_FOUNDATION_COLORMANAGEMENT = "EXT_foundation_colormanagement"
+
+DEFAULT_SDR_LUT = ("ACES 1.3", "No Look")
+DEFAULT_HDR_LUT = ("ACES 1.3 - HDR 1000 nits", "No Look")
+
+
+def __foundation_normalize_look(look):
+    return "No Look" if look in {None, "", "None"} else look
+
+
+def __foundation_lut_string(kind, view, look):
+    return f"{kind} / {view} / {look}"
+
+
+def __foundation_export_colormanagement(export_settings, gltf):
+    scene = bpy.context.scene
+    display = scene.display_settings.display_device
+    view = scene.view_settings.view_transform
+    look = __foundation_normalize_look(scene.view_settings.look)
+
+    sdr_view, sdr_look = DEFAULT_SDR_LUT
+    hdr_view, hdr_look = DEFAULT_HDR_LUT
+    if display in {"Rec.2100-PQ", "Rec.2100-HLG"}:
+        hdr_view, hdr_look = view, look
+    else:
+        sdr_view, sdr_look = view, look
+
+    extension = {
+        "postExposure": scene.view_settings.exposure,
+        "sdr": __foundation_lut_string("SDR", sdr_view, sdr_look),
+        "hdr": __foundation_lut_string("HDR", hdr_view, hdr_look),
+    }
+    gltf.extensions[EXT_FOUNDATION_COLORMANAGEMENT] = extension
+    if EXT_FOUNDATION_COLORMANAGEMENT not in gltf.extensions_used:
+        gltf.extensions_used.append(EXT_FOUNDATION_COLORMANAGEMENT)
+
 
 def save(context, export_settings):
     """Start the glTF 2.0 export and saves to content either to a .gltf or .glb file."""
@@ -75,6 +111,7 @@ def __export(export_settings):
     buffer = __create_buffer(exporter, export_settings)
     exporter.finalize_images()
 
+    __foundation_export_colormanagement(export_settings, exporter.glTF)
     export_user_extensions('gather_gltf_extensions_hook', export_settings, exporter.glTF)
     exporter.traverse_extensions()
     passthrough_extensions = []
