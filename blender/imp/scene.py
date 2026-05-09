@@ -25,7 +25,7 @@ from ...io.imp.user_extensions import import_user_extensions
 EXT_FOUNDATION_ENVIRONMENT = "EXT_foundation_environment"
 
 
-def __foundation_apply_environment(gltf, pyscene, scene):
+def _foundation_apply_environment(gltf, pyscene, scene):
     if pyscene.extensions is None or EXT_FOUNDATION_ENVIRONMENT not in pyscene.extensions:
         return
 
@@ -94,7 +94,7 @@ class BlenderScene():
             # So, there is an option to know if the user want to set extras or not
             if gltf.import_settings['import_scene_extras']:
                 set_extras(scene, pyscene.extras)
-            __foundation_apply_environment(gltf, pyscene, scene)
+            _foundation_apply_environment(gltf, pyscene, scene)
 
         compute_vnodes(gltf)
 
