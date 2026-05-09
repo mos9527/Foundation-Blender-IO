@@ -64,8 +64,6 @@ def __export(export_settings):
     exporter = GlTF2Exporter(export_settings)
     export_settings["foundation_curve_objects"] = set()
     __gather_gltf(exporter, export_settings)
-    if not export_settings["foundation_curve_objects"]:
-        raise RuntimeError("EXT_foundation_curves export requires at least one CURVE or CURVES object with BEZIER splines.")
 
     # If the directory does not exist, create it
     if not os.path.isdir(export_settings['gltf_filedirectory']):
