@@ -21,6 +21,7 @@ from .material.materials import gather_material
 
 
 EXT_FOUNDATION_CURVES = "EXT_foundation_curves"
+CURVES_DEFAULT_RADIUS = 0.01
 
 
 def gather_curve(blender_object, export_settings):
@@ -128,8 +129,7 @@ def __gather_curves_bezier_curve(blender_object, export_settings):
 
     positions = [0.0] * (point_count * 3)
     curves.points.foreach_get("position", positions)
-    radii = [0.0] * point_count
-    curves.points.foreach_get("radius", radii)
+    radii = __read_curves_float_attribute(curves, "radius", point_count, CURVES_DEFAULT_RADIUS)
     handles_left = __read_curves_vector_attribute(curves, ("handle_position_left", "handle_left"), point_count)
     handles_right = __read_curves_vector_attribute(curves, ("handle_position_right", "handle_right"), point_count)
     cyclic = __read_curves_bool_attribute(curves, "cyclic", curve_count)
@@ -199,6 +199,14 @@ def __read_curves_vector_attribute(curves, names, point_count):
 
     values = [0.0] * (point_count * 3)
     attr.data.foreach_get("vector", values)
+    return values
+
+
+def __read_curves_float_attribute(curves, name, point_count, default_value):
+    attr = curves.attributes.get(name) if hasattr(curves, "attributes") else None
+    values = [default_value] * point_count
+    if attr is not None:
+        attr.data.foreach_get("value", values)
     return values
 
 
