@@ -16,7 +16,7 @@ Uniform color:
         "EXT_foundation_environment": {
           "type": "color",
           "color": [1.0, 1.0, 1.0],
-          "strength": 0.05
+          "strength": 0.25
         }
       }
     }
