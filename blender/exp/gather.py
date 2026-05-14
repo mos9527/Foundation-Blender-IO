@@ -170,7 +170,7 @@ def __foundation_gather_environment(blender_scene, export_settings):
         return {
             "type": "color",
             "color": [1.0, 1.0, 1.0],
-            "strength": 0.05,
+            "strength": 0.25,
         }
 
     if world.use_nodes and world.node_tree is not None:
