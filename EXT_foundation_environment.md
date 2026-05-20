@@ -47,7 +47,7 @@ HDRI:
 
 - `type`: string, required. Either `"color"` or `"hdri"`.
 - `color`: number array of length 3, required for `"color"`. Linear RGB environment radiance before `strength`.
-- `uri`: string, required for `"hdri"`. Relative URI to a `.hdr` or `.hdri` Radiance HDR file.
+- `uri`: string, required for `"hdri"`. Relative URI to a `.hdr` or `.hdri` Radiance HDR file. The exporter copies the source HDR next to the exported glTF/GLB file (using the configured texture sub-directory when one is set and the export format is not GLB), and the URI is always relative to the glTF/GLB file's directory. For GLB the HDR is written as a sidecar file alongside the `.glb`.
 - `projection`: string, optional for `"hdri"`, default `"longlat"`. Foundation supports `"longlat"` and `"equirectangular"`.
 - `strength`: number, optional, default `1.0` for exported Blender worlds. Multiplies the color or HDRI radiance.
 - `azimuthOffset`: number, optional, default `0.0`. Rotation in degrees around the vertical axis.

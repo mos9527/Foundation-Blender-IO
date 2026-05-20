@@ -14,6 +14,7 @@
 
 import bpy
 import os
+import shutil
 
 from ...io.com import gltf2_io
 from ...io.com.gltf2_io_extensions import Extension
@@ -212,17 +213,53 @@ def __foundation_environment_image_uri(image, export_settings):
     if image is None or image.filepath in {None, ""}:
         return None
 
-    path = bpy.path.abspath(image.filepath, library=image.library)
-    ext = os.path.splitext(path)[1].lower()
+    src_path = bpy.path.abspath(image.filepath, library=image.library)
+    ext = os.path.splitext(src_path)[1].lower()
     if ext not in {".hdr", ".hdri"}:
         export_settings['log'].warning("Skipping unsupported world environment; Foundation editor supports only .hdr/.hdri")
         return None
 
-    if not os.path.exists(path):
+    if not os.path.isfile(src_path):
+        export_settings['log'].warning(
+            "Skipping world environment HDRI; file not found on disk: %s" % src_path)
+        return None
+
+    # Resolve a stable filename for the copied HDR sidecar.
+    filename = bpy.path.basename(image.filepath) or os.path.basename(src_path)
+    if not filename:
+        return None
+
+    gltf_dir = export_settings['gltf_filedirectory']
+
+    # Decide where to place the HDR file relative to the exported glTF/GLB.
+    # If a separate texture directory is configured (and not GLB), put it there;
+    # otherwise drop the HDR next to the glTF/GLB file.
+    texture_dir = export_settings.get('gltf_texturedirectory')
+    use_texture_subdir = (
+        texture_dir is not None
+        and export_settings.get('gltf_format') != 'GLB'
+        and os.path.normpath(texture_dir) != os.path.normpath(gltf_dir)
+    )
+    dst_dir = texture_dir if use_texture_subdir else gltf_dir
+
+    try:
+        src_abs = os.path.abspath(src_path)
+    except (OSError, ValueError):
+        src_abs = src_path
+
+    # If the source file already lives at the destination, just reference it.
+    try:
+        dst_path = os.path.join(dst_dir, filename)
+        if not (os.path.exists(dst_path) and os.path.samefile(src_abs, dst_path)):
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.copyfile(src_abs, dst_path)
+    except OSError as e:
+        export_settings['log'].warning(
+            "Failed to copy world environment HDRI %s next to exported file: %s" % (src_abs, e))
         return None
 
     try:
-        rel_path = os.path.relpath(path, start=export_settings['gltf_filedirectory'])
+        rel_path = os.path.relpath(dst_path, start=gltf_dir)
     except ValueError:
         return None
     return path_to_uri(rel_path)
