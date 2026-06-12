@@ -62,6 +62,11 @@ class BlenderLight():
         if 'intensity' in pylight.keys():
             sun.energy = BlenderLight.calc_energy_directional(gltf, pylight['intensity'])
 
+        if 'extensions' in pylight.keys() and 'EXT_foundation_lights' in pylight['extensions'].keys():
+            ext = pylight['extensions']['EXT_foundation_lights']
+            if 'angularDiameter' in ext.keys():
+                sun.angle = ext['angularDiameter']
+
         return sun
 
     @staticmethod

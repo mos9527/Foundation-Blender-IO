@@ -183,6 +183,17 @@ def __gather_name(blender_lamp, export_settings) -> Optional[str]:
 
 
 def __gather_extensions(blender_lamp, export_settings) -> Optional[dict]:
+    if blender_lamp.type == "SUN":
+        from ...io.com.gltf2_io_extensions import Extension
+        return {
+            'EXT_foundation_lights': Extension(
+                name='EXT_foundation_lights',
+                extension={
+                    'angularDiameter': blender_lamp.angle
+                },
+                required=False
+            )
+        }
     return None
 
 
