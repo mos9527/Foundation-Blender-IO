@@ -13,6 +13,7 @@ Some extensions non-exsistent in the [offical implementation](https://github.com
 - `EXT_foundation_materials` (Foundation private extension; see [draft](EXT_foundation_materials.md))
 - `EXT_foundation_colormanagement` (Foundation private extension; see [draft](EXT_foundation_colormanagement.md))
 - `EXT_foundation_environment` (Foundation private extension; see [draft](EXT_foundation_environment.md))
+- `EXT_foundation_lights` (Foundation private extension; see [draft](EXT_foundation_lights.md))
 Installation
 ---
 Download as ZIP then install via drag&drop.

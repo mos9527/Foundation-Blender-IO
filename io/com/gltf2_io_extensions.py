@@ -24,6 +24,9 @@ class Extension:
         self.extension = extension
         self.required = required
 
+    def to_dict(self):
+        return self.extension
+
 
 class ChildOfRootExtension(Extension):
     """Container object for extensions that should be appended to the root extensions"""

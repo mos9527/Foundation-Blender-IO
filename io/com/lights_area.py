@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ...io.com.gltf2_io import from_dict, from_union, from_none, from_float, from_str, from_list
-from ...io.com.gltf2_io import to_float, to_class
+from ...io.com.gltf2_io import to_float, to_class, from_extension
 
 
 class LightAreaRect:
@@ -85,7 +85,7 @@ class LightArea:
             result["name"] = from_str(self.name)
         if self.extensions is not None:
             result["extensions"] = from_dict(
-                lambda x: from_dict(lambda x: x, x), self.extensions
+                from_extension, self.extensions
             )
         if self.extras is not None:
             result["extras"] = self.extras

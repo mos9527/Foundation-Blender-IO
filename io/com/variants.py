@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...io.com.gltf2_io import from_dict, from_union, from_none, from_str
+from ...io.com.gltf2_io import from_dict, from_union, from_none, from_str, from_extension
 
 
 class Variant:
@@ -35,7 +35,7 @@ class Variant:
     def to_dict(self):
         result = {}
         result["name"] = from_union([from_str, from_none], self.name)
-        result["extensions"] = from_union([lambda x: from_dict(lambda x: from_dict(lambda x: x, x), x), from_none],
+        result["extensions"] = from_union([lambda x: from_dict(from_extension, x), from_none],
                                           self.extensions)
         result["extras"] = self.extras
         return result
