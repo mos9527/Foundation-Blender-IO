@@ -14,6 +14,7 @@
 
 import bpy
 import os
+import tempfile
 
 from .node import BlenderNode
 from .animation import BlenderAnimation
@@ -23,6 +24,20 @@ from ...io.com.path import uri_to_path
 from ...io.imp.user_extensions import import_user_extensions
 
 EXT_FOUNDATION_ENVIRONMENT = "EXT_foundation_environment"
+
+
+def _foundation_environment_buffer_view_bytes(gltf, buffer_view_index):
+    if buffer_view_index is None:
+        return None
+    if buffer_view_index < 0 or buffer_view_index >= len(gltf.data.buffer_views):
+        gltf.log.warning("Skipping Foundation environment image with invalid bufferView: %s" % buffer_view_index)
+        return None
+
+    view = gltf.data.buffer_views[buffer_view_index]
+    buffer_data = gltf.buffers[view.buffer]
+    offset = view.byte_offset or 0
+    end = offset + view.byte_length
+    return bytes(buffer_data[offset:end])
 
 
 def _foundation_apply_environment(gltf, pyscene, scene):
@@ -55,10 +70,20 @@ def _foundation_apply_environment(gltf, pyscene, scene):
 
     if env_type in {"hdri", "envMap"}:
         uri = extension.get("uri")
-        if uri is None:
+        buffer_view = extension.get("bufferView")
+        temp_path = None
+        if buffer_view is not None:
+            data = _foundation_environment_buffer_view_bytes(gltf, buffer_view)
+            if data is None:
+                return
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".hdr") as f:
+                f.write(data)
+                temp_path = f.name
+            path = temp_path
+        elif uri is not None:
+            path = os.path.abspath(os.path.join(os.path.dirname(gltf.filename), uri_to_path(uri)))
+        else:
             return
-
-        path = os.path.abspath(os.path.join(os.path.dirname(gltf.filename), uri_to_path(uri)))
         ext = os.path.splitext(path)[1].lower()
         if ext not in {".hdr", ".hdri"}:
             gltf.log.warning("Skipping unsupported Foundation environment image: %s" % path)
@@ -67,9 +92,18 @@ def _foundation_apply_environment(gltf, pyscene, scene):
         env = nodes.new("ShaderNodeTexEnvironment")
         try:
             env.image = bpy.data.images.load(path, check_existing=True)
+            if temp_path is not None:
+                env.image.name = "Foundation Environment"
+                env.image.pack()
         except RuntimeError:
             gltf.log.error("Missing Foundation environment image: %s" % path)
             return
+        finally:
+            if temp_path is not None:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
         links.new(env.outputs["Color"], background.inputs["Color"])
 
 

@@ -19,6 +19,7 @@ import shutil
 from ...io.com import gltf2_io
 from ...io.com.gltf2_io_extensions import Extension
 from ...io.com.path import path_to_uri
+from ...io.exp import binary_data as gltf2_io_binary_data
 from ...io.exp.user_extensions import export_user_extensions
 from ..com.extras import generate_extras
 from .cache import cached
@@ -184,11 +185,11 @@ def __foundation_gather_environment(blender_scene, export_settings):
                 link = color_socket.links[0]
                 if link.from_node.bl_idname == "ShaderNodeTexEnvironment":
                     image = link.from_node.image
-                    uri = __foundation_environment_image_uri(image, export_settings)
-                    if uri is not None:
+                    image_source = __foundation_environment_image_source(image, export_settings)
+                    if image_source is not None:
                         return {
                             "type": "hdri",
-                            "uri": uri,
+                            **image_source,
                             "projection": "longlat",
                             "strength": strength,
                         }
@@ -209,7 +210,7 @@ def __foundation_gather_environment(blender_scene, export_settings):
     }
 
 
-def __foundation_environment_image_uri(image, export_settings):
+def __foundation_environment_image_source(image, export_settings):
     if image is None or image.filepath in {None, ""}:
         return None
 
@@ -229,15 +230,23 @@ def __foundation_environment_image_uri(image, export_settings):
     if not filename:
         return None
 
+    if export_settings.get('gltf_format') == 'GLB':
+        try:
+            with open(src_path, "rb") as f:
+                return {"bufferView": gltf2_io_binary_data.BinaryData(f.read())}
+        except OSError as e:
+            export_settings['log'].warning(
+                "Failed to embed world environment HDRI %s in GLB: %s" % (src_path, e))
+            return None
+
     gltf_dir = export_settings['gltf_filedirectory']
 
     # Decide where to place the HDR file relative to the exported glTF/GLB.
-    # If a separate texture directory is configured (and not GLB), put it there;
-    # otherwise drop the HDR next to the glTF/GLB file.
+    # If a separate texture directory is configured, put it there; otherwise drop
+    # the HDR next to the glTF file.
     texture_dir = export_settings.get('gltf_texturedirectory')
     use_texture_subdir = (
         texture_dir is not None
-        and export_settings.get('gltf_format') != 'GLB'
         and os.path.normpath(texture_dir) != os.path.normpath(gltf_dir)
     )
     dst_dir = texture_dir if use_texture_subdir else gltf_dir
@@ -262,7 +271,7 @@ def __foundation_environment_image_uri(image, export_settings):
         rel_path = os.path.relpath(dst_path, start=gltf_dir)
     except ValueError:
         return None
-    return path_to_uri(rel_path)
+    return {"uri": path_to_uri(rel_path)}
 
 
 def __gather_extras(blender_object, export_settings):
