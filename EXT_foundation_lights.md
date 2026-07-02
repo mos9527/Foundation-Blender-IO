@@ -28,6 +28,17 @@ The extension is attached to `light.extensions` (inside a `KHR_lights_punctual` 
               "angularDiameter": 0.00925
             }
           }
+        },
+        {
+          "type": "point",
+          "color": [1.0, 0.92, 0.78],
+          "intensity": 10.0,
+          "extensions": {
+            "EXT_foundation_lights": {
+              "radius": 0.25,
+              "useShadow": false
+            }
+          }
         }
       ]
     }
@@ -39,3 +50,9 @@ The extension is attached to `light.extensions` (inside a `KHR_lights_punctual` 
 
 - `angularDiameter`: number, optional, default `0.0`.
   The apparent size of the light source disk in radians.
+
+- `radius`: number, optional, default `0.0`.
+  Point and spot emitter sphere radius in glTF scene units. `0.0` means punctual.
+
+- `useShadow`: boolean, optional, default `true`.
+  Whether this light casts shadows.

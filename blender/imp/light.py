@@ -42,8 +42,6 @@ class BlenderLight():
         if 'color' in pylight.keys():
             light.color = pylight['color']
 
-        # TODO range
-
         set_extras(light, pylight.get('extras'))
 
         pylight['blender_object_data'] = light  # Needed in case of KHR_animation_pointer
@@ -66,6 +64,8 @@ class BlenderLight():
             ext = pylight['extensions']['EXT_foundation_lights']
             if 'angularDiameter' in ext.keys():
                 sun.angle = ext['angularDiameter']
+
+        BlenderLight.apply_foundation_shadow(sun, pylight)
 
         return sun
 
@@ -103,6 +103,9 @@ class BlenderLight():
         if 'intensity' in pylight.keys():
             point.energy = BlenderLight.calc_energy_pointlike(gltf, pylight['intensity'])
 
+        point.shadow_soft_size = BlenderLight.get_foundation_radius(gltf, pylight)
+        BlenderLight.apply_foundation_shadow(point, pylight)
+
         return point
 
     @staticmethod
@@ -128,6 +131,9 @@ class BlenderLight():
 
         if 'intensity' in pylight.keys():
             spot.energy = BlenderLight.calc_energy_pointlike(gltf, pylight['intensity'])
+
+        spot.shadow_soft_size = BlenderLight.get_foundation_radius(gltf, pylight)
+        BlenderLight.apply_foundation_shadow(spot, pylight)
 
         # Store multiple channel data, as we will need all channels to convert to
         # blender data when animated by KHR_animation_pointer
@@ -156,3 +162,16 @@ class BlenderLight():
     @staticmethod
     def calc_spot_cone_inner(gltf, outercone, innercone):
         return 1 - (innercone / outercone)
+
+    @staticmethod
+    def get_foundation_radius(gltf, pylight):
+        ext = pylight.get('extensions', {}).get('EXT_foundation_lights')
+        if ext is None or 'radius' not in ext.keys():
+            return 0.0
+        return max(gltf.loc_gltf_to_blender([float(ext['radius']), 0.0, 0.0]).length, 0.0)
+
+    @staticmethod
+    def apply_foundation_shadow(light, pylight):
+        ext = pylight.get('extensions', {}).get('EXT_foundation_lights')
+        if ext is not None and 'useShadow' in ext.keys():
+            light.use_shadow = bool(ext['useShadow'])

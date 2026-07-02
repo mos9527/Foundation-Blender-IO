@@ -37,7 +37,7 @@ def gather_lights_punctual(blender_lamp, blender_lamp_world_matrix, export_setti
         intensity=__gather_intensity(blender_lamp, blender_lamp_world_matrix, export_settings),
         spot=__gather_spot(blender_lamp, export_settings),
         type=__gather_type(blender_lamp, export_settings),
-        range=__gather_range(blender_lamp, export_settings),
+        range=None,
         name=__gather_name(blender_lamp, export_settings),
         extensions=__gather_extensions(blender_lamp, export_settings),
         extras=__gather_extras(blender_lamp, export_settings)
@@ -166,35 +166,41 @@ def __gather_type(blender_lamp, _) -> str:
     return LIGHTS[blender_lamp.type]
 
 
-def __gather_range(blender_lamp, export_settings) -> Optional[float]:
-    if blender_lamp.use_custom_distance:
-
-        path_ = {}
-        path_['length'] = 1
-        path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/range"
-        export_settings['current_paths']["cutoff_distance"] = path_
-
-        return blender_lamp.cutoff_distance
-    return None
-
-
 def __gather_name(blender_lamp, export_settings) -> Optional[str]:
     return blender_lamp.name
 
 
 def __gather_extensions(blender_lamp, export_settings) -> Optional[dict]:
+    extension = {}
     if blender_lamp.type == "SUN":
-        from ...io.com.gltf2_io_extensions import Extension
-        return {
-            'EXT_foundation_lights': Extension(
-                name='EXT_foundation_lights',
-                extension={
-                    'angularDiameter': blender_lamp.angle
-                },
-                required=False
-            )
-        }
-    return None
+        extension['angularDiameter'] = blender_lamp.angle
+    elif blender_lamp.type in ["POINT", "SPOT"]:
+        radius = max(float(blender_lamp.shadow_soft_size), 0.0)
+        if radius > 0.0:
+            path_ = {}
+            path_['length'] = 1
+            path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/extensions/EXT_foundation_lights/radius"
+            export_settings['current_paths']["shadow_soft_size"] = path_
+            extension['radius'] = radius
+
+    if not blender_lamp.use_shadow:
+        path_ = {}
+        path_['length'] = 1
+        path_['path'] = "/extensions/KHR_lights_punctual/lights/XXX/extensions/EXT_foundation_lights/useShadow"
+        export_settings['current_paths']["use_shadow"] = path_
+        extension['useShadow'] = False
+
+    if not extension:
+        return None
+
+    from ...io.com.gltf2_io_extensions import Extension
+    return {
+        'EXT_foundation_lights': Extension(
+            name='EXT_foundation_lights',
+            extension=extension,
+            required=False
+        )
+    }
 
 
 def __gather_extras(blender_lamp, export_settings) -> Optional[Any]:
