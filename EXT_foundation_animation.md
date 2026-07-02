@@ -132,7 +132,7 @@ strip.stripEnd   = NlaStrip.frame_end   / fps
 strip.clipStart  = NlaStrip.action_frame_start / fps
 strip.clipEnd    = NlaStrip.action_frame_end   / fps
 strip.timeScale  = 1.0 / NlaStrip.scale          # Blender scale=2 plays at half speed (stretches the strip)
-strip.influence  = NlaStrip.influence            # animated influence is not exported in this version
+strip.influence  = 1.0                            # animated influence is not exported in this version
 strip.cyclic     = NlaStrip.repeat > 1.0
 ```
 

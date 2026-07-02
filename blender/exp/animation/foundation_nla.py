@@ -105,7 +105,7 @@ def gather_foundation_animation_tracks(gltf, export_settings):
                     "clipStart": strip.action_frame_start / fps,
                     "clipEnd": strip.action_frame_end / fps,
                     "timeScale": 1.0 / strip.scale if strip.scale != 0.0 else 1.0,
-                    "influence": strip.influence,
+                    "influence": 1.0,
                     "cyclic": strip.repeat > 1.0,
                 })
 
