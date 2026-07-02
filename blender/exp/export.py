@@ -26,6 +26,7 @@ from ...io.exp.user_extensions import export_user_extensions
 from ..com import json_util
 from . import gather as gltf2_blender_gather
 from .exporter import GlTF2Exporter
+from .animation.foundation_nla import gather_foundation_animation_tracks, EXT_FOUNDATION_ANIMATION
 
 EXT_FOUNDATION_COLORMANAGEMENT = "EXT_foundation_colormanagement"
 
@@ -62,6 +63,15 @@ def __foundation_export_colormanagement(export_settings, gltf):
     gltf.extensions[EXT_FOUNDATION_COLORMANAGEMENT] = extension
     if EXT_FOUNDATION_COLORMANAGEMENT not in gltf.extensions_used:
         gltf.extensions_used.append(EXT_FOUNDATION_COLORMANAGEMENT)
+
+
+def __foundation_export_animation_nla(export_settings, gltf):
+    extension = gather_foundation_animation_tracks(gltf, export_settings)
+    if extension is None:
+        return
+    gltf.extensions[EXT_FOUNDATION_ANIMATION] = extension
+    if EXT_FOUNDATION_ANIMATION not in gltf.extensions_used:
+        gltf.extensions_used.append(EXT_FOUNDATION_ANIMATION)
 
 
 def save(context, export_settings):
@@ -112,6 +122,7 @@ def __export(export_settings):
     exporter.finalize_images()
 
     __foundation_export_colormanagement(export_settings, exporter.glTF)
+    __foundation_export_animation_nla(export_settings, exporter.glTF)
     export_user_extensions('gather_gltf_extensions_hook', export_settings, exporter.glTF)
     exporter.traverse_extensions()
     passthrough_extensions = []
