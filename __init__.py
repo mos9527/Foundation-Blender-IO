@@ -796,18 +796,6 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
         default=True
     )
 
-    export_optimize_animation_keep_anim_armature: BoolProperty(
-        name='Force Keeping Channels for Bones',
-        description=(
-            "If all keyframes are identical in a rig, "
-            "force keeping the minimal animation. "
-            "When off, all possible channels for "
-            "the bones will be exported, even if empty "
-            "(minimal animation, 2 keyframes)"
-        ),
-        default=True
-    )
-
     export_optimize_animation_keep_anim_object: BoolProperty(
         name='Force Keeping Channel for Objects',
         description=(
@@ -1263,8 +1251,8 @@ class ExportGLTF2_Base(ConvertGLTF2_Base):
                 export_settings['gltf_export_anim_single_armature'] = False
 
             export_settings['gltf_nla_strips_merged_animation_name'] = self.export_nla_strips_merged_animation_name
-            export_settings['gltf_optimize_animation'] = self.export_optimize_animation_size
-            export_settings['gltf_optimize_animation_keep_armature'] = self.export_optimize_animation_keep_anim_armature
+            export_settings['gltf_optimize_animation'] = self.export_optimize_animation_size            
+            export_settings['gltf_optimize_animation_keep_armature'] = False
             export_settings['gltf_optimize_animation_keep_object'] = self.export_optimize_animation_keep_anim_object
             export_settings['gltf_optimize_disable_viewport'] = self.export_optimize_disable_viewport
             export_settings['gltf_export_reset_pose_bones'] = self.export_reset_pose_bones
@@ -1808,9 +1796,6 @@ def export_panel_animation_optimize(layout, operator):
         body.active = operator.export_animations
 
         body.prop(operator, 'export_optimize_animation_size')
-
-        row = body.row()
-        row.prop(operator, 'export_optimize_animation_keep_anim_armature')
 
         row = body.row()
         row.prop(operator, 'export_optimize_animation_keep_anim_object')

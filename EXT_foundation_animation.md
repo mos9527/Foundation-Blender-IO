@@ -140,12 +140,13 @@ strip.stripEnd   = NlaStrip.frame_end   / fps
 strip.clipStart  = NlaStrip.action_frame_start / fps
 strip.clipEnd    = NlaStrip.action_frame_end   / fps
 strip.timeScale  = 1.0 / NlaStrip.scale          # Blender scale=2 plays at half speed (stretches the strip)
-strip.influence  = NlaStrip.influence if NlaStrip.use_animated_influence else 1.0
-                                                 # static Replace weight; F-curve-driven influence is not exported as a curve
+strip.influence  = 1.0                            # animated influence is not exported in this version
 strip.cyclic     = NlaStrip.repeat > 1.0
 ```
 
 Only Replace strips are represented; `blend_type` other than Replace and animated influence/strip-time are out of scope for this version. Muted strips are skipped. A strip whose action was not exported as its own named glTF animation (filtered action, sound/transition strip, etc.) is skipped with a warning; a track left with zero strips is omitted entirely.
+
+For overlay tracks to behave like Blender's Replace stacking, each per-action clip must be **sparse** — it may only carry channels for the bones/nodes its action actually animates. The exporter therefore forces "Force Keeping Channels for Bones" off (`gltf_optimize_animation_keep_armature = False`), so constant, un-keyed bone channels are pruned rather than baked at rest. Otherwise every clip would carry the whole rig's pose and a strip would replace the entire skeleton (not just the bones it animates), collapsing overlays into full-body replacement.
 
 ### Import
 
