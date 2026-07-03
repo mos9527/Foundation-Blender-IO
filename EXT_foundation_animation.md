@@ -93,16 +93,24 @@ All time fields are in seconds, matching glTF animation sampler input time.
   Clip-local seconds advanced per timeline second (Clip Timescale). Must be `> 0`.
 
 - `influence`: number, optional, default `1.0`.
-  Strip weight in `[0, 1]`. Stored for round-trip and future blending. With blending out of scope, a consumer MAY treat `influence <= 0` as inactive and `influence > 0` as full.
+  Per-strip blend weight in `[0, 1]` under Replace semantics (see Evaluation). The strip's sampled value is blended over the result of lower tracks per channel: `1.0` fully replaces the channel (higher tracks win), `0.0` contributes nothing, intermediate values blend. A consumer MAY skip strips with `influence <= 0`.
 
 - `cyclic`: boolean, optional, default `false`.
   When `true`, the clip window loops (restarts) to fill the strip; when `false`, clip time clamps at `clipEnd`.
 
 ## Evaluation (normative)
 
-Tracks are evaluated in array order, lowest index first, so a later track overwrites an earlier one for any channel they share (Replace semantics; no cross-strip blending in this version).
+Start from the rest pose. Tracks are evaluated in array order, lowest index first, and each active strip is blended into the running pose using **Replace** semantics weighted by `influence`. For every channel a strip drives:
 
-For a timeline time `t`, for each non-muted track, select the active strip where `stripStart <= t <= stripEnd` (last in array order on overlap). Map to clip-local time:
+```text
+pose.translation = lerp(pose.translation, sampled, influence)
+pose.scale       = lerp(pose.scale,       sampled, influence)
+pose.rotation    = slerp(pose.rotation,   sampled, influence)   # shortest arc
+```
+
+So a strip with `influence = 1` overwrites the channel (later tracks win over earlier ones), `influence = 0` contributes nothing, and intermediate values blend the track over everything below it. Only the channels a strip actually drives are touched; untouched channels keep their lower-track (or rest) value. Replace is the only blend mode in this version (Blender "Replace"); additive/multiply blend types are out of scope.
+
+For a timeline time `t`, a strip is active when `stripStart <= t <= stripEnd`. Strips on one track are expected non-overlapping; overlapping strips are blended in array order (later over earlier). Map each active strip to clip-local time:
 
 ```text
 L = clipEnd - clipStart                 # clip window, > 0
@@ -111,7 +119,7 @@ clipLocal = cyclic ? clipStart + mod(u, L)
                    : clipStart + min(u, L)
 ```
 
-Sample the referenced glTF animation at `clipLocal` and apply its channels to their targets. Strips outside `[stripStart, stripEnd]` contribute nothing.
+Sample the referenced glTF animation at `clipLocal` and blend its channels onto their targets as above. Strips outside `[stripStart, stripEnd]` contribute nothing.
 
 ## Blender Mapping
 
@@ -132,7 +140,8 @@ strip.stripEnd   = NlaStrip.frame_end   / fps
 strip.clipStart  = NlaStrip.action_frame_start / fps
 strip.clipEnd    = NlaStrip.action_frame_end   / fps
 strip.timeScale  = 1.0 / NlaStrip.scale          # Blender scale=2 plays at half speed (stretches the strip)
-strip.influence  = 1.0                            # animated influence is not exported in this version
+strip.influence  = NlaStrip.influence if NlaStrip.use_animated_influence else 1.0
+                                                 # static Replace weight; F-curve-driven influence is not exported as a curve
 strip.cyclic     = NlaStrip.repeat > 1.0
 ```
 
@@ -144,12 +153,12 @@ Blender import of this extension is out of scope for this version (export-from-B
 
 ## Foundation Mapping
 
-Foundation imports `tracks[]` into its scene NLA (`FNlaTrack` / `FNlaStrip`). Each strip's `animation` resolves to the Foundation clip group imported from that glTF animation. The runtime evaluates tracks exactly as in Evaluation above: reset to rest, walk tracks low-to-high priority, sample each active strip's clips into the pose, higher tracks overwrite. `influence` is stored and shown in the editor and gates the strip on/off at runtime.
+Foundation imports `tracks[]` into its scene NLA (`FNlaTrack` / `FNlaStrip`). Each strip's `animation` resolves to the Foundation clip group imported from that glTF animation. The runtime evaluates tracks exactly as in Evaluation above: reset to rest, walk tracks low-to-high priority, and blend each active strip's clips into the pose per channel weighted by `influence` (Replace: lerp translation/scale, slerp rotation). `influence` is stored, shown/editable in the editor, and applied as the per-channel blend weight at runtime.
 
 ## Non-Goals
 
-- No blending between overlapping strips or across tracks (Replace only).
-- No animated influence or animated strip time curves.
+- No additive or multiply blend types; Replace (influence-weighted) is the only supported blend mode.
+- No animated influence or animated strip time curves (influence is a static per-strip value).
 - No blend-in/blend-out, reversed playback, or `use_sync_length` round trip.
 - No morph-target (`weights`) NLA arrangement in this draft; weight animations still play on the base timeline.
 
