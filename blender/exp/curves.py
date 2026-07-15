@@ -1,4 +1,4 @@
-# Copyright 2018-2025 The glTF-Blender-IO authors.
+# Copyright 2018-2026 The glTF-Blender-IO authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,56 +12,91 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 from mathutils import Vector
 
+from ...io.com import gltf2_io
 from ...io.com import constants as gltf2_io_constants
 from ...io.exp import binary_data as gltf2_io_binary_data
-from .accessors import gather_accessor
+from .accessors import gather_accessor, array_to_accessor
 from .material.materials import gather_material
 
 
-EXT_FOUNDATION_CURVES = "EXT_foundation_curves"
 CURVES_DEFAULT_RADIUS = 0.01
+# Blender Curves curve_type: 0=CATMULL_ROM, 1=POLY, 2=BEZIER, 3=NURBS
+_CURVES_POLY_TYPE = 1
 
 
-def gather_curve(blender_object, export_settings):
+def gather_curve_mesh(blender_object, export_settings):
+    """Export POLY curve objects as an indexed LINES mesh with POSITION/_RADIUS/TEXCOORD_0."""
     if blender_object is None or blender_object.type not in ["CURVE", "CURVES"]:
         return None
 
     if blender_object.type == "CURVE":
-        points, curve_vertex_counts = __gather_legacy_bezier_curve(blender_object, export_settings)
+        positions, radii, texcoords, indices = __gather_legacy_poly_curve(blender_object, export_settings)
     else:
-        points, curve_vertex_counts = __gather_curves_bezier_curve(blender_object, export_settings)
+        positions, radii, texcoords, indices = __gather_curves_poly_curve(blender_object, export_settings)
 
-    if len(points) == 0 or len(curve_vertex_counts) == 0:
-        raise RuntimeError("'{}' does not contain any renderable Bezier splines.".format(blender_object.name))
+    if len(positions) == 0 or len(indices) == 0:
+        raise RuntimeError("'{}' does not contain any renderable POLY segments.".format(blender_object.name))
 
-    curve = {
-        "name": blender_object.name,
-        "basis": "bezier",
-        "points": gather_accessor(
-            gltf2_io_binary_data.BinaryData.from_list(points, gltf2_io_constants.ComponentType.Float),
-            gltf2_io_constants.ComponentType.Float,
-            len(points) // 4,
-            None,
-            None,
-            gltf2_io_constants.DataType.Vec4,
-            export_settings),
-        "curveVertexCounts": gather_accessor(
-            gltf2_io_binary_data.BinaryData.from_list(curve_vertex_counts, gltf2_io_constants.ComponentType.UnsignedInt),
-            gltf2_io_constants.ComponentType.UnsignedInt,
-            len(curve_vertex_counts),
-            None,
-            None,
-            gltf2_io_constants.DataType.Scalar,
-            export_settings),
+    positions = np.asarray(positions, dtype=np.float32).reshape(-1, 3)
+    radii = np.asarray(radii, dtype=np.float32)
+    texcoords = np.asarray(texcoords, dtype=np.float32).reshape(-1, 2)
+    indices = np.asarray(indices, dtype=np.uint32)
+
+    attributes = {
+        "POSITION": array_to_accessor(
+            positions,
+            export_settings,
+            component_type=gltf2_io_constants.ComponentType.Float,
+            data_type=gltf2_io_constants.DataType.Vec3,
+            include_max_and_min=True,
+        ),
+        "_RADIUS": array_to_accessor(
+            radii,
+            export_settings,
+            component_type=gltf2_io_constants.ComponentType.Float,
+            data_type=gltf2_io_constants.DataType.Scalar,
+        ),
+        "TEXCOORD_0": array_to_accessor(
+            texcoords,
+            export_settings,
+            component_type=gltf2_io_constants.ComponentType.Float,
+            data_type=gltf2_io_constants.DataType.Vec2,
+        ),
     }
 
-    material = __gather_curve_material(blender_object, export_settings)
-    if material is not None:
-        curve["material"] = material
+    index_accessor = gather_accessor(
+        gltf2_io_binary_data.BinaryData(
+            indices.tobytes(),
+            gltf2_io_constants.BufferViewTarget.ELEMENT_ARRAY_BUFFER,
+        ),
+        gltf2_io_constants.ComponentType.UnsignedInt,
+        len(indices),
+        None,
+        None,
+        gltf2_io_constants.DataType.Scalar,
+        export_settings,
+    )
 
-    return curve
+    primitive = gltf2_io.MeshPrimitive(
+        attributes=attributes,
+        extensions=None,
+        extras=None,
+        indices=index_accessor,
+        material=__gather_curve_material(blender_object, export_settings),
+        mode=1,  # LINES
+        targets=None,
+    )
+
+    return gltf2_io.Mesh(
+        extensions=None,
+        extras=None,
+        name=blender_object.name,
+        weights=None,
+        primitives=[primitive],
+    )
 
 
 def __gather_curve_material(blender_object, export_settings):
@@ -80,58 +115,55 @@ def __gather_curve_material(blender_object, export_settings):
     return gathered_material
 
 
-def __gather_legacy_bezier_curve(blender_object, export_settings):
+def __gather_legacy_poly_curve(blender_object, export_settings):
     curve = blender_object.data
-    points = []
-    curve_vertex_counts = []
+    positions = []
+    radii = []
+    texcoords = []
+    indices = []
     default_radius = max(float(getattr(curve, "bevel_depth", 0.0)), 0.001)
 
     for spline in curve.splines:
-        if spline.type != "BEZIER":
+        if spline.type != "POLY":
             raise RuntimeError(
-                "EXT_foundation_curves Bezier export requires every spline in '{}' to be BEZIER; "
-                "found {}.".format(blender_object.name, spline.type))
+                "Foundation curve export requires every spline in '{}' to be POLY; found {}.".format(
+                    blender_object.name, spline.type))
 
-        bezier_points = list(spline.bezier_points)
-        if len(bezier_points) < 2:
+        points = list(spline.points)
+        if len(points) < 2:
             raise RuntimeError(
-                "EXT_foundation_curves Bezier export requires at least two points per spline in '{}'.".format(
+                "Foundation curve export requires at least two points per POLY spline in '{}'.".format(
                     blender_object.name))
 
-        first_point = len(points) // 4
-        segment_count = len(bezier_points) if getattr(spline, "use_cyclic_u", False) else len(bezier_points) - 1
-        __append_bezier_anchor(points, bezier_points[0], default_radius, export_settings)
+        first = len(positions) // 3
+        cyclic = bool(getattr(spline, "use_cyclic_u", False))
+        count = len(points)
+        for i, point in enumerate(points):
+            __append_vertex(
+                positions, radii, texcoords,
+                point.co, default_radius * float(getattr(point, "radius", 1.0)),
+                float(i) / float(count if cyclic else max(count - 1, 1)),
+                export_settings)
 
+        segment_count = count if cyclic else count - 1
         for i in range(segment_count):
-            point = bezier_points[i]
-            next_point = bezier_points[(i + 1) % len(bezier_points)]
-            radius = __point_radius(point, default_radius)
-            next_radius = __point_radius(next_point, default_radius)
+            indices.extend([first + i, first + ((i + 1) % count)])
 
-            __append_point(points, point.handle_right, __lerp(radius, next_radius, 1.0 / 3.0), export_settings)
-            __append_point(points, next_point.handle_left, __lerp(radius, next_radius, 2.0 / 3.0), export_settings)
-            __append_bezier_anchor(points, next_point, default_radius, export_settings)
-
-        point_count = len(points) // 4 - first_point
-        curve_vertex_counts.append(point_count)
-
-    return points, curve_vertex_counts
+    return positions, radii, texcoords, indices
 
 
-def __gather_curves_bezier_curve(blender_object, export_settings):
+def __gather_curves_poly_curve(blender_object, export_settings):
     curves = blender_object.data
     point_count = len(curves.points)
     curve_count = len(curves.curves)
     if point_count == 0 or curve_count == 0:
         raise RuntimeError("'{}' does not contain any curves.".format(blender_object.name))
 
-    __assert_curves_object_is_bezier(curves, blender_object.name)
+    __assert_curves_object_is_poly(curves, blender_object.name)
 
-    positions = [0.0] * (point_count * 3)
-    curves.points.foreach_get("position", positions)
-    radii = __read_curves_float_attribute(curves, "radius", point_count, CURVES_DEFAULT_RADIUS)
-    handles_left = __read_curves_vector_attribute(curves, ("handle_position_left", "handle_left"), point_count)
-    handles_right = __read_curves_vector_attribute(curves, ("handle_position_right", "handle_right"), point_count)
+    raw_positions = [0.0] * (point_count * 3)
+    curves.points.foreach_get("position", raw_positions)
+    point_radii = __read_curves_float_attribute(curves, "radius", point_count, CURVES_DEFAULT_RADIUS)
     cyclic = __read_curves_bool_attribute(curves, "cyclic", curve_count)
 
     first_point_indices = [0] * curve_count
@@ -139,67 +171,52 @@ def __gather_curves_bezier_curve(blender_object, export_settings):
     curves.curves.foreach_get("first_point_index", first_point_indices)
     curves.curves.foreach_get("points_length", curve_point_counts)
 
-    points = []
-    curve_vertex_counts = []
+    positions = []
+    radii = []
+    texcoords = []
+    indices = []
     for curve_index, (first_point, count) in enumerate(zip(first_point_indices, curve_point_counts)):
         if count < 2:
             raise RuntimeError(
-                "EXT_foundation_curves Bezier export requires at least two points per curve in '{}'.".format(
+                "Foundation curve export requires at least two points per POLY curve in '{}'.".format(
                     blender_object.name))
 
-        first_control = len(points) // 4
-        segment_count = count if cyclic[curve_index] else count - 1
-        __append_curves_control(points, positions, radii, first_point, export_settings)
+        first = len(positions) // 3
+        is_cyclic = cyclic[curve_index]
+        for i in range(count):
+            src = first_point + i
+            co = Vector((raw_positions[src * 3], raw_positions[src * 3 + 1], raw_positions[src * 3 + 2]))
+            u = float(i) / float(count if is_cyclic else max(count - 1, 1))
+            __append_vertex(positions, radii, texcoords, co, point_radii[src], u, export_settings)
+
+        segment_count = count if is_cyclic else count - 1
         for i in range(segment_count):
-            point = first_point + i
-            next_point = first_point + ((i + 1) % count)
-            radius = radii[point]
-            next_radius = radii[next_point]
+            indices.extend([first + i, first + ((i + 1) % count)])
 
-            __append_point(points, __vector_at(handles_right, point), __lerp(radius, next_radius, 1.0 / 3.0), export_settings)
-            __append_point(points, __vector_at(handles_left, next_point), __lerp(radius, next_radius, 2.0 / 3.0), export_settings)
-            __append_curves_control(points, positions, radii, next_point, export_settings)
-
-        curve_vertex_counts.append(len(points) // 4 - first_control)
-
-    return points, curve_vertex_counts
+    return positions, radii, texcoords, indices
 
 
-def __assert_curves_object_is_bezier(curves, object_name):
+def __assert_curves_object_is_poly(curves, object_name):
     curve_type_attr = curves.attributes.get("curve_type") if hasattr(curves, "attributes") else None
     if curve_type_attr is None:
         raise RuntimeError(
-            "EXT_foundation_curves Bezier export requires '{}' to expose a curve_type attribute.".format(object_name))
+            "Foundation curve export requires '{}' to expose a curve_type attribute.".format(object_name))
 
     curve_types = [0] * len(curves.curves)
     curve_type_attr.data.foreach_get("value", curve_types)
     for curve_type in curve_types:
-        if not __is_bezier_curve_type(curve_type):
+        if not __is_poly_curve_type(curve_type):
             raise RuntimeError(
-                "EXT_foundation_curves Bezier export requires every curve in '{}' to be BEZIER.".format(object_name))
+                "Foundation curve export requires every curve in '{}' to be POLY.".format(object_name))
 
 
-def __is_bezier_curve_type(curve_type):
-    if curve_type == "BEZIER":
+def __is_poly_curve_type(curve_type):
+    if curve_type == "POLY":
         return True
     try:
-        return int(curve_type) == 2
+        return int(curve_type) == _CURVES_POLY_TYPE
     except (TypeError, ValueError):
         return False
-
-
-def __read_curves_vector_attribute(curves, names, point_count):
-    attr = None
-    for name in names:
-        attr = curves.attributes.get(name)
-        if attr is not None:
-            break
-    if attr is None:
-        raise RuntimeError("EXT_foundation_curves Bezier export requires point attribute '{}'.".format(names[0]))
-
-    values = [0.0] * (point_count * 3)
-    attr.data.foreach_get("vector", values)
-    return values
 
 
 def __read_curves_float_attribute(curves, name, point_count, default_value):
@@ -220,29 +237,11 @@ def __read_curves_bool_attribute(curves, name, curve_count):
     return values
 
 
-def __append_bezier_anchor(points, point, default_radius, export_settings):
-    __append_point(points, point.co, __point_radius(point, default_radius), export_settings)
-
-
-def __append_curves_control(points, positions, radii, index, export_settings):
-    __append_point(points, __vector_at(positions, index), radii[index], export_settings)
-
-
-def __vector_at(values, index):
-    return Vector((values[index * 3], values[index * 3 + 1], values[index * 3 + 2]))
-
-
-def __point_radius(point, default_radius):
-    return default_radius * float(getattr(point, "radius", 1.0))
-
-
-def __lerp(a, b, t):
-    return a + (b - a) * t
-
-
-def __append_point(points, co, radius, export_settings):
+def __append_vertex(positions, radii, texcoords, co, radius, u, export_settings):
     co = __convert_swizzle_location(co, export_settings)
-    points.extend([float(co[0]), float(co[1]), float(co[2]), max(float(radius), 0.0)])
+    positions.extend([float(co[0]), float(co[1]), float(co[2])])
+    radii.append(max(float(radius), 0.0))
+    texcoords.extend([float(u), 0.0])
 
 
 def __convert_swizzle_location(loc, export_settings):

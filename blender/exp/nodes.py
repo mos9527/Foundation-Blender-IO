@@ -283,22 +283,6 @@ def __gather_extensions(vnode, export_settings):
 
                 export_settings['current_paths'] = {}
 
-    if blender_object is not None and blender_object.type in ["CURVE", "CURVES"]:
-        curve = gltf2_blender_gather_curves.gather_curve(blender_object, export_settings)
-        if curve is not None:
-            curve_extension = gltf2_io_extensions.ChildOfRootExtension(
-                name=gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES,
-                path=["curves"],
-                extension=curve,
-            )
-            extensions[gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES] = gltf2_io_extensions.Extension(
-                name=gltf2_blender_gather_curves.EXT_FOUNDATION_CURVES,
-                extension={
-                    "curve": curve_extension,
-                },
-            )
-            export_settings.setdefault("foundation_curve_objects", set()).add(id(blender_object))
-
     return extensions if extensions else None
 
 
@@ -316,9 +300,9 @@ def __gather_matrix(blender_object, export_settings):
 def __gather_mesh(vnode, blender_object, export_settings):
     if vnode.blender_type == VExportNode.COLLECTION:
         return None
-    if blender_object and id(blender_object) in export_settings.get("foundation_curve_objects", set()):
-        return None
-    if blender_object and blender_object.type in ['CURVE', 'SURFACE', 'FONT']:
+    if blender_object and blender_object.type in ["CURVE", "CURVES"]:
+        return gltf2_blender_gather_curves.gather_curve_mesh(blender_object, export_settings)
+    if blender_object and blender_object.type in ['SURFACE', 'FONT']:
         return __gather_mesh_from_blender_nonmesh(blender_object, export_settings)
     if blender_object is None and type(vnode.data).__name__ not in ["Mesh", "PointCloud"]:
         return None  # TODO

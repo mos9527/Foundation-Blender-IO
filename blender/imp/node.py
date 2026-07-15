@@ -18,10 +18,10 @@ from ...io.imp.user_extensions import import_user_extensions
 from ..com.extras import set_extras
 from ..com.blender_default import BLENDER_GLTF_SPECIAL_COLLECTION
 from .mesh import BlenderMesh
+from .curves import BlenderCurve
 from .camera import BlenderCamera
 from .light import BlenderLight
 from .light_area import BlenderLightArea
-from .curves import BlenderCurve
 from .vnode import VNode
 
 
@@ -91,13 +91,6 @@ class BlenderNode():
 
             # Since we create the actual Blender object after the create call, we call the hook here
             import_user_extensions('gather_import_light_after_hook', gltf, vnode, obj, light)
-
-        elif vnode.curve_node_idx is not None:
-            pynode = gltf.data.nodes[vnode.curve_node_idx]
-            curve_id = (pynode.extensions or {})['EXT_foundation_curves']['curve']
-            curve = BlenderCurve.create(gltf, vnode, curve_id)
-            name = vnode.name or curve.name
-            obj = bpy.data.objects.new(name, curve)
 
         elif vnode.is_arma:
             armature = bpy.data.armatures.new(vnode.arma_name)
@@ -308,18 +301,17 @@ class BlenderNode():
             return bpy.data.objects.new(vnode.name or "Invalid Mesh Index", None)
         pymesh = gltf.data.meshes[pynode.mesh]
 
-        # Detect if the mesh will be a Point Cloud or not
+        # Detect Point Cloud / Foundation curve LINES meshes
+        is_curve = BlenderCurve.is_curve_mesh(pymesh)
         is_point_cloud = False
-        if gltf.import_settings.get('import_point_as_pointcloud', False):
+        if not is_curve and gltf.import_settings.get('import_point_as_pointcloud', False):
             if all([prim.mode == 0 for prim in pymesh.primitives]):  # All POINTS
                 is_point_cloud = True
-        else:
-            is_point_cloud = False
 
-        # Key to cache the Blender mesh by.
-        # Same cache key = instances of the same Blender mesh.
+        # Key to cache the Blender datablock by.
+        # Same cache key = instances of the same Blender mesh/curve.
         cache_key = None
-        if not pymesh.shapekey_names:
+        if is_curve or not pymesh.shapekey_names:
             cache_key = (pynode.skin,)
         else:
             # Unlike glTF, all instances of a Blender mesh share shapekeys.
@@ -331,10 +323,18 @@ class BlenderNode():
                 cache_key = None  # don't use the cache at all
 
         if cache_key is not None and cache_key in pymesh.blender_name:
-            mesh = bpy.data.meshes[pymesh.blender_name[cache_key]
-                                   ] if is_point_cloud is False else bpy.data.pointclouds[pymesh.blender_name[cache_key]]
+            datablock_name = pymesh.blender_name[cache_key]
+            if is_curve:
+                mesh = bpy.data.curves[datablock_name]
+            elif is_point_cloud:
+                mesh = bpy.data.pointclouds[datablock_name]
+            else:
+                mesh = bpy.data.meshes[datablock_name]
         else:
-            if not is_point_cloud:
+            if is_curve:
+                gltf.log.info("Blender create Curve node {}".format(pymesh.name or pynode.mesh))
+                mesh = BlenderCurve.create(gltf, pynode.mesh)
+            elif not is_point_cloud:
                 gltf.log.info("Blender create Mesh node {}".format(pymesh.name or pynode.mesh))
                 mesh = BlenderMesh.create(gltf, pynode.mesh, pynode.skin)
             else:
@@ -347,10 +347,10 @@ class BlenderNode():
         name = vnode.name or mesh.name
         obj = bpy.data.objects.new(name, mesh)
 
-        if pymesh.shapekey_names:
+        if not is_curve and pymesh.shapekey_names:
             BlenderNode.set_morph_weights(gltf, pynode, obj)
 
-        if pynode.skin is not None:
+        if not is_curve and pynode.skin is not None:
             BlenderNode.setup_skinning(gltf, pynode, obj)
 
         return obj

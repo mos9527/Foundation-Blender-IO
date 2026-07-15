@@ -67,8 +67,6 @@ class VNode:
         self.mesh_node_idx = None
         self.camera_node_idx = None
         self.light_node_idx = None
-        self.curve_node_idx = None
-
         # Store in which glTF scene(s) this node is used.
         self.scenes = []
 
@@ -135,9 +133,6 @@ def init_vnodes(gltf):
         if 'KHR_lights_punctual' in (pynode.extensions or {}) \
                 or 'EXT_lights_area' in (pynode.extensions or {}):
             vnode.light_node_idx = i
-        if 'EXT_foundation_curves' in (pynode.extensions or {}):
-            vnode.curve_node_idx = i
-
     for id in gltf.vnodes:
         for child in gltf.vnodes[id].children:
             assert gltf.vnodes[child].parent is None

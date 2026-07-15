@@ -108,7 +108,6 @@ def save(context, export_settings):
 
 def __export(export_settings):
     exporter = GlTF2Exporter(export_settings)
-    export_settings["foundation_curve_objects"] = set()
     __gather_gltf(exporter, export_settings)
 
     # If the directory does not exist, create it

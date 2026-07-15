@@ -9,7 +9,7 @@ Some extensions non-exsistent in the [offical implementation](https://github.com
 - `EXT_lights_area` (https://github.com/KhronosGroup/glTF/pull/2525)
 - `EXT_materials_subsurface` (Foundation private extension; see [draft](EXT_materials_subsurface.md))
 - `EXT_camera_lens` (Foundation private extension; see [draft](EXT_camera_lens.md))
-- `EXT_foundation_curves` (Foundation private extension; see [draft](EXT_foundation_curves.md))
+- Curve strands: standard glTF `LINES` + `_RADIUS` + `TEXCOORD_0` (POLY export/import; see [EXT_foundation_curves.md](EXT_foundation_curves.md); the private extension is deprecated)
 - `EXT_foundation_materials` (Foundation private extension; see [draft](EXT_foundation_materials.md))
 - `EXT_foundation_colormanagement` (Foundation private extension; see [draft](EXT_foundation_colormanagement.md))
 - `EXT_foundation_environment` (Foundation private extension; see [draft](EXT_foundation_environment.md))
