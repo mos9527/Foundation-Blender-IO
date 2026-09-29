@@ -199,8 +199,8 @@ def __gather_curves_poly_curve(blender_object, export_settings):
 def __assert_curves_object_is_poly(curves, object_name):
     curve_type_attr = curves.attributes.get("curve_type") if hasattr(curves, "attributes") else None
     if curve_type_attr is None:
-        raise RuntimeError(
-            "Foundation curve export requires '{}' to expose a curve_type attribute.".format(object_name))
+        # Blender can omit the curve_type attribute when every curve is POLY.
+        return
 
     curve_types = [0] * len(curves.curves)
     curve_type_attr.data.foreach_get("value", curve_types)

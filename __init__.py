@@ -2230,9 +2230,203 @@ def menu_func_import(self, context):
     self.layout.operator(ImportGLTF2.bl_idname, text='glTF 2.0 (.glb/.gltf) (Foundation)')
 
 
+def _curve_needs_poly_conversion(obj):
+    if obj.type == 'CURVE':
+        return any(spline.type != 'POLY' for spline in obj.data.splines)
+    curve_type = obj.data.attributes.get('curve_type')
+    if curve_type is None:
+        return bool(obj.data.curves)
+    return any(value.value not in (1, 'POLY') for value in curve_type.data)
+
+
+def _convert_curve_object_to_poly(context, obj):
+    original_data = obj.data
+    copied_data = None
+    was_hidden = obj.hide_get()
+    try:
+        if was_hidden:
+            obj.hide_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        if original_data.users > 1 or original_data.library is not None:
+            copied_data = original_data.copy()
+            obj.data = copied_data
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        if obj.type == 'CURVES':
+            bpy.ops.curves.select_all(action='SELECT')
+            result = bpy.ops.curves.curve_type_set(type='POLY')
+        else:
+            bpy.ops.curve.select_all(action='SELECT')
+            result = bpy.ops.curve.spline_type_set(type='POLY')
+        if 'FINISHED' not in result:
+            raise RuntimeError('Curve type conversion did not finish')
+    except Exception:
+        if obj.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        if copied_data is not None:
+            obj.data = original_data
+            bpy.data.batch_remove(ids=(copied_data,))
+        raise
+    finally:
+        if obj.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        obj.select_set(False)
+        if was_hidden:
+            obj.hide_set(True)
+
+
+class _ConvertCurvesToPolyBase:
+    bl_options = {'REGISTER', 'UNDO'}
+    selected_only = False
+
+    @classmethod
+    def poll(cls, context):
+        if context.mode != 'OBJECT' or context.scene is None:
+            return False
+        objects = context.selected_objects if cls.selected_only else context.scene.objects
+        return any(obj.type in {'CURVE', 'CURVES'} for obj in objects)
+
+    def execute(self, context):
+        objects = context.selected_objects if self.selected_only else context.scene.objects
+        targets = [obj for obj in objects if obj.type in {'CURVE', 'CURVES'}]
+        selected = list(context.selected_objects)
+        active = context.view_layer.objects.active
+        converted = 0
+        skipped = []
+        try:
+            for obj in selected:
+                obj.select_set(False)
+            for obj in targets:
+                if obj.library is not None or obj.name not in context.view_layer.objects:
+                    skipped.append(obj.name)
+                    continue
+                try:
+                    if not _curve_needs_poly_conversion(obj):
+                        continue
+                    _convert_curve_object_to_poly(context, obj)
+                    converted += 1
+                except (RuntimeError, TypeError, AttributeError) as exc:
+                    skipped.append(f'{obj.name} ({exc})')
+        finally:
+            context.view_layer.objects.active = active
+            for obj in selected:
+                obj.select_set(True)
+
+        if skipped:
+            self.report({'WARNING'}, f'Skipped {len(skipped)} curve object(s): {", ".join(skipped[:3])}')
+        self.report({'INFO'}, f'Converted {converted} curve object(s) to POLY')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_foundation_selected_curves_to_poly(_ConvertCurvesToPolyBase, Operator):
+    bl_idname = 'object.foundation_selected_curves_to_poly'
+    bl_label = 'Convert Selected Curves to POLY (Foundation)'
+    bl_description = 'Convert all splines in selected curve objects to POLY for Foundation export'
+    selected_only = True
+
+
+class OBJECT_OT_foundation_all_curves_to_poly(_ConvertCurvesToPolyBase, Operator):
+    bl_idname = 'object.foundation_all_curves_to_poly'
+    bl_label = 'Convert All Curves to POLY (Foundation)'
+    bl_description = 'Convert all curve objects in the current scene to POLY for Foundation export'
+
+
+def menu_func_convert_curves(self, context):
+    self.layout.separator()
+    self.layout.operator(OBJECT_OT_foundation_selected_curves_to_poly.bl_idname)
+    self.layout.operator(OBJECT_OT_foundation_all_curves_to_poly.bl_idname)
+
+
+class _ApplyModifiersAndVisualTransformBase:
+    bl_options = {'REGISTER', 'UNDO'}
+    selected_only = False
+    object_types = {'MESH', 'CURVE', 'CURVES'}
+
+    @classmethod
+    def poll(cls, context):
+        if context.mode != 'OBJECT' or context.scene is None:
+            return False
+        objects = context.selected_objects if cls.selected_only else context.scene.objects
+        return any(obj.type in cls.object_types for obj in objects)
+
+    def execute(self, context):
+        objects = context.selected_objects if self.selected_only else context.scene.objects
+        targets = [obj for obj in objects if obj.type in self.object_types]
+        selected = list(context.selected_objects)
+        active = context.view_layer.objects.active
+        applied = 0
+        transformed = 0
+        skipped = []
+        try:
+            for obj in selected:
+                obj.select_set(False)
+            for obj in targets:
+                if obj.library is not None or obj.name not in context.view_layer.objects or obj.hide_viewport:
+                    skipped.append(obj.name)
+                    continue
+                was_hidden = obj.hide_get()
+                try:
+                    if was_hidden:
+                        obj.hide_set(False)
+                    obj.select_set(True)
+                    context.view_layer.objects.active = obj
+                    for modifier_name in [modifier.name for modifier in obj.modifiers]:
+                        try:
+                            result = bpy.ops.object.modifier_apply(modifier=modifier_name, single_user=True)
+                            if 'FINISHED' in result:
+                                applied += 1
+                            else:
+                                skipped.append(f'{obj.name}: {modifier_name}')
+                        except (RuntimeError, TypeError, ValueError) as exc:
+                            skipped.append(f'{obj.name}: {modifier_name} ({exc})')
+                    if 'FINISHED' in bpy.ops.object.visual_transform_apply():
+                        transformed += 1
+                    else:
+                        skipped.append(f'{obj.name}: visual transform')
+                except (RuntimeError, TypeError, ValueError) as exc:
+                    skipped.append(f'{obj.name} ({exc})')
+                finally:
+                    obj.select_set(False)
+                    if was_hidden:
+                        obj.hide_set(True)
+        finally:
+            context.view_layer.objects.active = active
+            for obj in selected:
+                obj.select_set(True)
+
+        if skipped:
+            self.report({'WARNING'}, f'Skipped {len(skipped)} operation(s): {", ".join(skipped[:3])}')
+        self.report({'INFO'}, f'Applied {applied} modifier(s) and visual transforms on {transformed} object(s)')
+        return {'FINISHED'}
+
+
+class OBJECT_OT_foundation_selected_apply_modifiers(_ApplyModifiersAndVisualTransformBase, Operator):
+    bl_idname = 'object.foundation_selected_apply_modifiers'
+    bl_label = 'Apply Modifiers and Visual Transform to Selected (Foundation)'
+    bl_description = 'Apply all modifiers and visual transforms to selected mesh and curve objects'
+    selected_only = True
+
+
+class OBJECT_OT_foundation_all_apply_modifiers(_ApplyModifiersAndVisualTransformBase, Operator):
+    bl_idname = 'object.foundation_all_apply_modifiers'
+    bl_label = 'Apply Modifiers and Visual Transform to All (Foundation)'
+    bl_description = 'Apply all modifiers and visual transforms to mesh and curve objects in the current scene'
+
+
+def menu_func_apply_modifiers(self, context):
+    self.layout.separator()
+    self.layout.operator(OBJECT_OT_foundation_selected_apply_modifiers.bl_idname)
+    self.layout.operator(OBJECT_OT_foundation_all_apply_modifiers.bl_idname)
+
+
 classes = (
     ExportGLTF2,
     ImportGLTF2,
+    OBJECT_OT_foundation_selected_curves_to_poly,
+    OBJECT_OT_foundation_all_curves_to_poly,
+    OBJECT_OT_foundation_selected_apply_modifiers,
+    OBJECT_OT_foundation_all_apply_modifiers,
     IO_FH_gltf2_foundation,
     GLTF2_filter_action,
     GLTF_AddonPreferences
@@ -2255,10 +2449,14 @@ def register():
     # add to the export / import menu
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    bpy.types.VIEW3D_MT_object_convert.append(menu_func_convert_curves)
+    bpy.types.VIEW3D_MT_object_apply.append(menu_func_apply_modifiers)
 
 
 def unregister():
     from .blender.com import gltf2_blender_ui as blender_ui
+    bpy.types.VIEW3D_MT_object_apply.remove(menu_func_apply_modifiers)
+    bpy.types.VIEW3D_MT_object_convert.remove(menu_func_convert_curves)
     blender_ui.unregister()
     if bpy.context.preferences.addons[_addon_package()].preferences.KHR_materials_variants_ui is True:
         blender_ui.variant_unregister()
